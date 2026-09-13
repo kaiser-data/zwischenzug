@@ -38,3 +38,8 @@ def app_url():
 @pytest.fixture
 def harness_url():
     return "file://" + str(ROOT / "tests" / "store_harness.html")
+
+
+@pytest.fixture
+def profile_harness_url():
+    return "file://" + str(ROOT / "tests" / "profile_harness.html")
