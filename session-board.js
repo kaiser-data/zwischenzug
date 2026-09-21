@@ -31,6 +31,8 @@
   let stepStarted = 0;
   // Saved progress for the open session: { at, logged, steps: { [stepId]: entry } }.
   let progress = { at: "", logged: false, steps: {} };
+  // View only: which side is at the bottom. Taken from the session, not stored.
+  let flipped = false;
   // Moves stepped back over, newest last. Only valid for the Chess object they came from,
   // so any `game = new Chess(...)` elsewhere drops them without extra bookkeeping.
   let future = [];
@@ -47,8 +49,8 @@
   function renderBoard() {
     const boardEl = document.getElementById("chessBoard");
     if (!boardEl || !game) return;
-    const files = "abcdefgh".split("");
-    const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
+    const files = flipped ? "hgfedcba".split("") : "abcdefgh".split("");
+    const ranks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
     boardEl.innerHTML = "";
     const last = game.history({ verbose: true }).slice(-1)[0];
     const legal = selected ? game.moves({ square: selected, verbose: true }) : [];
@@ -64,13 +66,13 @@
         if (dests.has(sq)) el.classList.add("hint", piece ? "piece" : "empty");
         if (last && (last.from === sq || last.to === sq)) el.classList.add("last");
         if (piece) el.innerHTML = pieceSVG(piece.color, piece.type);
-        if (r === 1) {
+        if (ri === 7) {            // file letter on the rank nearest the viewer
           const c = document.createElement("span");
           c.className = "coord file";
           c.textContent = f;
           el.appendChild(c);
         }
-        if (f === "a") {
+        if (fi === 0) {            // rank digit on the leftmost drawn file
           const c = document.createElement("span");
           c.className = "coord rank";
           c.textContent = String(r);
@@ -80,6 +82,8 @@
         boardEl.appendChild(el);
       });
     });
+    const flipBtn = document.getElementById("boardFlip");
+    if (flipBtn) flipBtn.setAttribute("aria-pressed", flipped ? "true" : "false");
     const turn = game.turn() === "w" ? "White" : "Black";
     const hist = game.history().join(" ");
     const need = mustPlayNow();
@@ -183,6 +187,11 @@
         renderBoard();
       });
     });
+  }
+
+  function flipBoard() {
+    flipped = !flipped;
+    renderBoard();
   }
 
   // Reopen a locked step: answers and key go, the log row stays (one row per drill).
@@ -603,6 +612,9 @@
   function loadSession(id) {
     sessionId = id;
     session = id ? sessions()[id] : null;
+    // Orientation belongs to the session: deriving it per step would spin the board
+    // between a step where Black is to move and the next where White is.
+    flipped = !!session && startOf(session.startFen || (session.steps && session.steps[0] && session.steps[0].fen) || "").black;
     progress = (typeof window.pathProgress === "object" && id)
       ? window.pathProgress.get(id)
       : { at: "", logged: false, steps: {} };
@@ -929,6 +941,7 @@
       if (!panel || panel.classList.contains("hidden")) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) return;
+      if (e.key === "f") { e.preventDefault(); flipBoard(); return; }
       const dir = { ArrowLeft: "back", ArrowRight: "fwd", ArrowUp: "start", ArrowDown: "end", Home: "start", End: "end" }[e.key];
       if (!dir) return;
       e.preventDefault();
@@ -962,6 +975,7 @@
     }
     document.getElementById("boardLock").addEventListener("click", lockStep);
     document.getElementById("boardRedo").addEventListener("click", redoStep);
+    document.getElementById("boardFlip").addEventListener("click", flipBoard);
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.
     document.getElementById("boardForm").addEventListener("submit", function (e) {
       e.preventDefault();

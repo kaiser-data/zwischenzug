@@ -9,9 +9,12 @@ SOLVE_SESSION = "aagaard-6-01"
 STOP_SESSION = "XbhWoWMi"
 
 
-def square_index(square):
-    """#chessBoard button index for a python-chess square (rank 8 first)."""
-    return (7 - chess.square_rank(square)) * 8 + chess.square_file(square)
+def square_index(square, flipped=False):
+    """#chessBoard button index for a python-chess square (rank 8 first, or rank 1 when flipped)."""
+    rank, file = chess.square_rank(square), chess.square_file(square)
+    if flipped:
+        return rank * 8 + (7 - file)
+    return (7 - rank) * 8 + file
 
 
 def play(page, fen, sans):
@@ -216,4 +219,51 @@ def test_redo_does_not_write_a_second_aagaard_row(browser_page, app_url):
     page.evaluate("async () => { await window.pathStore.settled(); }")
 
     assert len(page.evaluate("window.pathStore.state.aagaard")) == 1, "one row per drill"
+    assert page.errors == []
+
+
+def test_board_starts_from_black_for_a_black_session(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session="qVxKt9G0", tab="session"))
+    page.wait_for_selector("#chessBoard button")
+
+    # Turned board: the first drawn square is h1, so it carries the rank coordinate "1".
+    # From White it is a8 and carries "8".
+    assert page.get_attribute("#boardFlip", "aria-pressed") == "true"
+    assert "1" in page.locator("#chessBoard button").first.inner_text()
+
+    page.click("#boardFlip")
+
+    assert page.get_attribute("#boardFlip", "aria-pressed") == "false"
+    assert "8" in page.locator("#chessBoard button").first.inner_text()
+    assert page.errors == []
+
+
+def test_a_flipped_board_still_plays_the_line(browser_page, app_url):
+    """Clicking squares must follow the drawn orientation, not the stored one."""
+    page = browser_page
+    page.goto(app_url(session="qVxKt9G0", tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    fen = "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25"
+
+    board = chess.Board(fen)
+    for san in ["Ra7", "Re8+"]:
+        move = board.parse_san(san)
+        page.locator("#chessBoard button").nth(square_index(move.from_square, True)).click()
+        page.locator("#chessBoard button").nth(square_index(move.to_square, True)).click()
+        board.push(move)
+
+    assert "Ra7 Re8+" in page.inner_text("#boardStatus")
+    assert page.errors == []
+
+
+def test_f_turns_the_board(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session="qVxKt9G0", tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    page.locator("#boardTitle").click()          # focus off any input, so the key reaches the board
+
+    page.keyboard.press("f")
+
+    assert page.get_attribute("#boardFlip", "aria-pressed") == "false"
     assert page.errors == []
