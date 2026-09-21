@@ -185,6 +185,18 @@
     });
   }
 
+  // Reopen a locked step: answers and key go, the log row stays (one row per drill).
+  function redoStep() {
+    const entry = entryFor(stepId(step));
+    entry.locked = false;
+    entry.passed = false;
+    entry.answers = {};
+    entry.branches = [];
+    locked[step] = false;
+    saveProgress();
+    loadStep(step);
+  }
+
   function renderSteps() {
     document.getElementById("boardSteps").innerHTML = steps().map(function (s, i) {
       const cls = i === step ? "on" : (locked[i] ? "done" : "");
@@ -219,6 +231,7 @@
     document.getElementById("boardErr").textContent = "";
     document.getElementById("boardNext").disabled = step >= steps().length - 1;
     document.getElementById("boardLock").disabled = locked[step];
+    document.getElementById("boardRedo").classList.toggle("hidden", !locked[step]);
     renderBranches();
     renderVariations();
   }
@@ -457,12 +470,13 @@
     key.innerHTML = (s.branches && s.branches.length ? key.innerHTML : "") + (s.key || "");
     key.classList.add("show");
     document.getElementById("boardLock").disabled = true;
+    document.getElementById("boardRedo").classList.remove("hidden");
     document.getElementById("boardNext").disabled = step >= steps().length - 1;
     document.getElementById("boardErr").textContent = "";
     renderBoard();
     renderVariations();
     const logAs = session.logAs || {};
-    if (step === steps().length - 1 && logAs.kind === "aagaard" && typeof window.pathLogAagaard === "function") {
+    if (step === steps().length - 1 && logAs.kind === "aagaard" && typeof window.pathLogAagaard === "function" && !progress.logged) {
       // The first failed attempt decides the log entry; a clean first write is a full line.
       const miss = firstMiss || { result: "full" };
       window.pathLogAagaard({
@@ -474,6 +488,8 @@
         ply: miss.ply || null,
         note: "board drill",
       });
+      progress.logged = true;
+      saveProgress();
     } else if (step === steps().length - 1 && typeof window.pathLogGame === "function") {
       const noteEl = form.note;
       window.pathLogGame({
@@ -945,6 +961,7 @@
       });
     }
     document.getElementById("boardLock").addEventListener("click", lockStep);
+    document.getElementById("boardRedo").addEventListener("click", redoStep);
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.
     document.getElementById("boardForm").addEventListener("submit", function (e) {
       e.preventDefault();

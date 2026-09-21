@@ -174,3 +174,46 @@ def test_jumping_keeps_what_was_typed(browser_page, app_url):
 
     assert page.input_value("input[name=scare]") == "Nxf5"
     assert page.errors == []
+
+
+def test_redo_reopens_a_locked_step(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=STOP_SESSION, tab="session"))
+    page.wait_for_selector("#boardTake")
+    fen = "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15"
+
+    play(page, fen, ["Qg3", "Nxf5", "gxf5", "Bxf5", "Bxf5", "Qxf5"])
+    page.click("#boardTake")
+    page.click("#boardLock")
+    assert page.is_visible("#boardRedo")
+
+    page.click("#boardRedo")
+
+    assert page.input_value("input[name=scare]") == "", "answers cleared"
+    assert "show" not in (page.get_attribute("#boardKey", "class") or ""), "key hidden"
+    assert not page.is_disabled("#boardLock"), "solvable again"
+    assert page.is_hidden("#boardRedo")
+    assert page.errors == []
+
+
+def test_redo_does_not_write_a_second_aagaard_row(browser_page, app_url):
+    step = private_step(SOLVE_SESSION)
+    line, fen = step["solve"]["line"], step["fen"]
+    page = browser_page
+    page.goto(app_url(session=SOLVE_SESSION, tab="session"))
+    page.wait_for_selector("#boardTake")
+
+    play(page, fen, line)
+    page.click("#boardTake")
+    page.click("#boardLock")
+    page.evaluate("async () => { await window.pathStore.settled(); }")
+    assert len(page.evaluate("window.pathStore.state.aagaard")) == 1
+
+    page.click("#boardRedo")
+    play(page, fen, line)
+    page.click("#boardTake")
+    page.click("#boardLock")
+    page.evaluate("async () => { await window.pathStore.settled(); }")
+
+    assert len(page.evaluate("window.pathStore.state.aagaard")) == 1, "one row per drill"
+    assert page.errors == []
