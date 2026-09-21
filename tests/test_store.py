@@ -2,7 +2,51 @@ def test_blank_shape(browser_page, harness_url):
     page = browser_page
     page.goto(harness_url)
     shape = page.evaluate("Object.keys(window.PathStore.blank()).sort()")
-    assert shape == ["aagaard", "blitz", "checks", "games", "sessions", "variations"]
+    assert shape == [
+        "aagaard", "blitz", "checks", "games", "progress", "sessions", "variations",
+    ]
+
+
+def test_progress_round_trips(browser_page, harness_url):
+    page = browser_page
+    page.goto(harness_url)
+    progress = page.evaluate(
+        """async () => {
+            localStorage.clear();
+            const a = window.PathStore.local();
+            await a.hydrate();
+            a.state.progress.qVxKt9G0 = {
+                at: "diagnose", logged: false,
+                steps: { onemore: { locked: true, passed: true, answers: { scare: "Re8+" }, branches: [] } }
+            };
+            await a.commit();
+            const b = window.PathStore.local();
+            const state = await b.hydrate();
+            return state.progress;
+        }"""
+    )
+    assert progress["qVxKt9G0"]["at"] == "diagnose"
+    assert progress["qVxKt9G0"]["steps"]["onemore"]["answers"]["scare"] == "Re8+"
+
+
+def test_progress_of_the_wrong_shape_is_dropped(browser_page, harness_url):
+    """A stored array, string or null must fall back to the blank object."""
+    page = browser_page
+    page.goto(harness_url)
+    kinds = page.evaluate(
+        """async () => {
+            const out = [];
+            for (const bad of [[], "x", null, 7]) {
+                localStorage.clear();
+                localStorage.setItem(window.PathStore.KEY, JSON.stringify({ progress: bad }));
+                const store = window.PathStore.local();
+                const state = await store.hydrate();
+                out.push(Array.isArray(state.progress) ? "array" : typeof state.progress);
+            }
+            return out;
+        }"""
+    )
+    assert kinds == ["object", "object", "object", "object"]
 
 
 def test_hydrate_empty_storage_gives_blank(browser_page, harness_url):

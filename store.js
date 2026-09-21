@@ -5,7 +5,7 @@
   const KEY = "chess_path_to_v1";
 
   function blank() {
-    return { sessions: [], games: [], blitz: {}, checks: {}, aagaard: [], variations: {} };
+    return { sessions: [], games: [], blitz: {}, checks: {}, aagaard: [], variations: {}, progress: {} };
   }
 
   function isPlainObject(value) {
