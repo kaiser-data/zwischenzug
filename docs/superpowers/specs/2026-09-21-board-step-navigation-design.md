@@ -3,6 +3,7 @@
 Date: 2026-09-21
 Status: design, approved in conversation (approach A)
 Touches: `session-board.js`, `store.js`, `index.html`, `tests/`
+Scope: step navigation, saved progress, Redo, board orientation
 
 ## The problem
 
@@ -25,6 +26,8 @@ Result: material already solved has to be typed again to reach the step after it
    into them, and which branches were played.
 3. A locked step can be reopened with **↺ Redo**, which clears its answers and
    hides its key so it can be solved again.
+4. The board can be turned around, so a game played as Black is studied from
+   Black's side.
 
 ## What stays as it is
 
@@ -149,9 +152,31 @@ the picker; it selects the session, not the step.
 Existing tests use a fresh browser context each, so an empty store keeps their
 current behaviour.
 
+## Board orientation
+
+`renderBoard()` draws ranks 8→1 and files a→h unconditionally, so every position
+is seen from White. Games 1 and 2 were played as White and it never showed; the
+simul was played as Black.
+
+**Orientation is a property of the session, not of the step.** Deriving it per
+step would spin the board between step 4 (Black to move) and step 5 (White to
+move) of the same game. It is taken once, from the side to move in the session's
+`startFen`, when the session loads.
+
+- `renderBoard()` reverses `ranks` and `files` when flipped. The coordinate
+  labels move with it: the file letter belongs on the rank nearest the viewer
+  and the rank digit on the leftmost file, so the `r === 1` / `f === "a"`
+  conditions become "last rank drawn" / "first file drawn".
+- A **⇅ Flip** button joins ⏮ ◀ ▶ ⏭, with `f` as the shortcut. `f` is free, and
+  keys are already ignored while typing.
+- A manual flip holds for as long as the session is open and resets when another
+  session is loaded, where the automatic side is right again. It is a view
+  preference, so it stays out of `state.progress`.
+- Square indices are unchanged in the DOM order sense: the test helper
+  `square_index(square, flipped=False)` mirrors the same arithmetic, and every
+  existing call keeps its meaning because those sessions are not flipped.
+
 ## Out of scope
 
-Rotating the board to Black's view. It came up in the same conversation and is a
-separate, smaller change to `renderBoard()` (ranks, files and the coordinate
-labels), plus an orientation argument in the test helper `square_index`. It gets
-its own spec if wanted.
+Anything else on the Board tab: no new piece set, no chrome, no engine in the
+page (HANDOFF §9).
