@@ -9,3 +9,5 @@ __pycache__/
 # Copyrighted books and anything transcribed from them. The repo is public.
 books/
 sessions/private/
+# Local knowledge graph output (graphify); regenerate with `graphify update .`
+graphify-out/
