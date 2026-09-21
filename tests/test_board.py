@@ -146,3 +146,31 @@ def test_progress_survives_a_reload(browser_page, app_url):
     page.click("#boardNext")
     assert page.locator("#boardSteps > *").first.get_attribute("class") == "done"
     assert page.errors == []
+
+
+def test_step_strip_jumps_without_locking(browser_page, app_url):
+    """Any step is reachable at any time, and jumping reveals no key."""
+    page = browser_page
+    page.goto(app_url(session=STOP_SESSION, tab="session"))
+    page.wait_for_selector("#boardTake")
+    first_title = page.inner_text("#boardTitle")
+
+    page.locator("#boardSteps button").nth(2).click()
+
+    assert page.inner_text("#boardTitle") != first_title, "a different step is open"
+    assert "show" not in (page.get_attribute("#boardKey", "class") or ""), "no key from jumping"
+    assert page.locator("#boardSteps button").nth(2).get_attribute("aria-current") == "step"
+    assert page.errors == []
+
+
+def test_jumping_keeps_what_was_typed(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=STOP_SESSION, tab="session"))
+    page.wait_for_selector("input[name=scare]")
+    page.fill("input[name=scare]", "Nxf5")
+
+    page.locator("#boardSteps button").nth(1).click()
+    page.locator("#boardSteps button").nth(0).click()
+
+    assert page.input_value("input[name=scare]") == "Nxf5"
+    assert page.errors == []

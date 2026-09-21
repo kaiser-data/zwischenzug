@@ -188,8 +188,19 @@
   function renderSteps() {
     document.getElementById("boardSteps").innerHTML = steps().map(function (s, i) {
       const cls = i === step ? "on" : (locked[i] ? "done" : "");
-      return "<span class='" + cls + "'>" + esc(s.name) + "</span>";
+      const now = i === step ? " aria-current='step'" : "";
+      return "<button type='button' class='" + cls + "' data-i='" + i + "'" + now + ">" + esc(s.name) + "</button>";
     }).join("");
+    // Any step, any time, both directions. A key still only comes from Lock.
+    document.getElementById("boardSteps").querySelectorAll("button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const to = Number(btn.dataset.i);
+        if (to === step) return;
+        captureAnswers();
+        saveProgress();
+        loadStep(to);
+      });
+    });
     document.getElementById("boardTitle").textContent = cur().title || "";
     document.getElementById("boardPrompt").textContent = cur().prompt || "";
     const qs = cur().questions || [];
@@ -206,7 +217,7 @@
     document.getElementById("boardKey").classList.remove("show");
     document.getElementById("boardKey").innerHTML = "";
     document.getElementById("boardErr").textContent = "";
-    document.getElementById("boardNext").disabled = !locked[step];
+    document.getElementById("boardNext").disabled = step >= steps().length - 1;
     document.getElementById("boardLock").disabled = locked[step];
     renderBranches();
     renderVariations();
@@ -940,7 +951,10 @@
       if (!locked[step]) lockStep();
     });
     document.getElementById("boardNext").addEventListener("click", function () {
-      if (step < steps().length - 1 && locked[step]) loadStep(step + 1);
+      if (step >= steps().length - 1) return;
+      captureAnswers();
+      saveProgress();
+      loadStep(step + 1);
     });
     ready = true;
   };

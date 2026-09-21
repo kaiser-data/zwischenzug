@@ -289,9 +289,10 @@
   }
   .sq.dark.hint.piece::after { border-color: rgba(255,255,255,.35); }
   .board-steps { display: flex; gap: 6px; margin: 0 0 14px; flex-wrap: wrap; }
-  .board-steps span { padding: 6px 10px; border: 1px solid rgba(28,23,18,.2); background: rgba(255,255,255,.4); color: var(--muted); }
-  .board-steps span.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .board-steps span.done { border-color: var(--stamp); color: var(--stamp); }
+  .board-steps button { padding: 6px 10px; border: 1px solid rgba(28,23,18,.2); background: rgba(255,255,255,.4); color: var(--muted); font: inherit; cursor: pointer; }
+  .board-steps button:hover { border-color: var(--ink); color: var(--ink); }
+  .board-steps button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .board-steps button.done { border-color: var(--stamp); color: var(--stamp); }
   .session-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
   .session-pick select { flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
   .aagaard-log { margin-top: 28px; padding-top: 18px; border-top: 1px solid rgba(28,23,18,.2); }
