@@ -699,6 +699,41 @@
     }
   };
 
+  // Board tab progress per session: which steps are locked, what was written into them,
+  // which branches were played. Keyed by step id so re-authoring a session can only
+  // retire an entry, never move a ✓ onto a different step.
+  window.pathProgress = {
+    get: (sessionId) => {
+      const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+      const raw = (state.progress || {})[sessionId];
+      const src = isObj(raw) ? raw : {};
+      const stored = isObj(src.steps) ? src.steps : {};
+      const steps = {};
+      Object.keys(stored).forEach((id) => {
+        const s = stored[id];
+        if (!isObj(s)) return;
+        steps[id] = {
+          locked: !!s.locked,
+          passed: !!s.passed,
+          answers: isObj(s.answers) ? Object.assign({}, s.answers) : {},
+          branches: Array.isArray(s.branches) ? s.branches.slice() : [],
+        };
+      });
+      return { at: typeof src.at === "string" ? src.at : "", logged: !!src.logged, steps };
+    },
+    set: (sessionId, progress) => {
+      state.progress = state.progress || {};
+      const p = progress || {};
+      const steps = (p.steps && typeof p.steps === "object") ? p.steps : {};
+      if (Object.keys(steps).length || p.logged) {
+        state.progress[sessionId] = { at: p.at || "", logged: !!p.logged, steps };
+      } else {
+        delete state.progress[sessionId];
+      }
+      save(state);
+    },
+  };
+
   const $ = (id) => document.getElementById(id);
 
   function weekMinutes() {

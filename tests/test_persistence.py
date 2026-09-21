@@ -79,3 +79,51 @@ def test_store_is_local_backend_on_file_url(browser_page, app_url):
     page.wait_for_function("window.pathStore !== undefined")
     assert page.evaluate("window.pathStore.backend") == "local"
     assert page.errors == []
+
+
+def test_progress_survives_reload(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(tab="log"))
+    page.wait_for_function("typeof window.pathProgress === 'object'")
+    page.evaluate(
+        """async () => {
+            window.pathProgress.set("s1", {
+                at: "two",
+                logged: true,
+                steps: { one: { locked: true, passed: true, answers: { scare: "Re8+" }, branches: ["a"] } }
+            });
+            await window.pathStore.settled();
+        }"""
+    )
+
+    page.reload()
+    page.wait_for_function("typeof window.pathProgress === 'object'")
+    got = page.evaluate("window.pathProgress.get('s1')")
+
+    assert got["at"] == "two"
+    assert got["logged"] is True
+    assert got["steps"]["one"] == {
+        "locked": True, "passed": True, "answers": {"scare": "Re8+"}, "branches": ["a"],
+    }
+    assert page.errors == []
+
+
+def test_progress_get_survives_malformed_storage(browser_page, app_url):
+    """Corrupt entries must read as empty, the way pathVariations.get does."""
+    page = browser_page
+    page.goto(app_url(tab="log"))
+    page.wait_for_function("typeof window.pathProgress === 'object'")
+    got = page.evaluate(
+        """() => {
+            window.pathStore.state.progress = { s2: { steps: { one: null, two: 7, three: { locked: 1 } } } };
+            return window.pathProgress.get("s2");
+        }"""
+    )
+
+    assert got["at"] == ""
+    assert got["logged"] is False
+    assert "one" not in got["steps"] and "two" not in got["steps"]
+    assert got["steps"]["three"] == {
+        "locked": True, "passed": False, "answers": {}, "branches": [],
+    }
+    assert page.errors == []
