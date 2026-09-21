@@ -1,11 +1,11 @@
 # Handoff — Zwischenzug
 
-Date: 2026-09-13
+Date: 2026-09-21
 Repo: https://github.com/kaiser-data/zwischenzug (**public**)
 Workspace: `/Users/marty/grok_projects/chess_path_to`
 Open: `open index.html` → **Board** or **Drills** tab
 
-This replaces the 2026-09-12 handoff. The dossier exists and trains calculation. Do not restart, rename, or build a chess site.
+This replaces the 2026-09-13 handoff. The dossier exists and trains calculation. Do not restart, rename, or build a chess site.
 
 ---
 
@@ -14,10 +14,10 @@ This replaces the 2026-09-12 handoff. The dossier exists and trains calculation.
 | | |
 |---|---|
 | Last pushed commit | `f6c4a77` Merge the storage-layer split |
-| **Uncommitted** | None — working tree clean |
-| Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost) |
+| **Uncommitted** | `sessions/qVxKt9G0.json` (game 3) + regenerated `sessions/bundle.js` — not committed, waiting for **go** |
+| Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) |
 | Private, gitignored | `books/` (Aagaard PDF, page renders, `ch6/check.html`, `ch6/build_sessions.py`), `sessions/private/` (24 drills `aagaard-6-01` … `24` + `bundle.js`) |
-| Player's progress | Played through XbhWoWMi on the board. Aagaard ch.6 drills built; he confirmed all 24 transcribed positions match the book. He has not logged any exercise yet. |
+| Player's progress | qVxKt9G0 built 2026-09-21, not yet played on the board. Simul date/time: 19.09.2026, start time is a placeholder (19:00) until he confirms. Played through XbhWoWMi. Aagaard ch.6 drills built; he confirmed all 24 transcribed positions match the book. He has not logged any exercise yet. |
 
 Commit rule: only when he says **go** or **push**. Before committing, grep the diff for book content (see §6).
 
@@ -33,6 +33,7 @@ Martin Kaiser, Dr., GER, FIDE 4689640, standard 2171, Lichess `emperor555`. Hard
 |---|---|---|---|
 | [JB2bQpWt](https://lichess.org/JB2bQpWt) 15+10, 1–0 | `20.a4` | at `…a6`, the reply he **disliked** | `21.Bd7 Bxg2 22.e6!` (the zwischenzug) |
 | [XbhWoWMi](https://lichess.org/XbhWoWMi) 15+10, 0–1 | `15.Qg3 Nxf5 gxf5 Bxf5 Bxf5` | at his own recapture, the one he **liked** | ply 5 `…Qxf5` (d7 queen through empty e6) |
+| [qVxKt9G0](https://lichess.org/qVxKt9G0) simul 19.09.26, ½–½ | `25…Ra7 26.Re8+ Kf7` | at the reply that **looked fine** (`…Kf7`) | `27.Rc8!` and c6 falls |
 
 Game 2 also: clock 12:05 → 3:26 over moves 22–26 in a level position, then `32.Kg2?? Qg5+` with 1:42 left (Kh1/Kh2/Kf1 draw). Opening was fine (White better through move 13).
 
@@ -41,6 +42,9 @@ His words — keep them in the UI, do not replace them with eval:
 - "I didn't play a4 because of a6."
 - "a4 is also complicated — you need Bd7, Bxg2."
 - Game 2: "I was seeing it but thought I can recapture and win a piece."
+- Game 3 (his answer, 2026-09-21): at 25…Ra7 he saw 26.Re8+, held it harmless, and stopped at …Kf7.
+
+Game 3 context (club report, `sc-weisse-dame.de`): Jubiläumssimultan for 75 years SC Weisse Dame, GM Robert Rabiega (DWZ 2421) **17:2 (+15 =4 −0)** over nineteen boards, ~4.5 hours, no clock but move when he arrives, everyone above DWZ 1800 got Black. Martin (listed DWZ 2108) was one of four players who drew; nobody won. The half point is a result, not a rescue — the session says so in the log key.
 
 ---
 
@@ -151,9 +155,10 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
 ## 8. Next (in order)
 
 1. ~~Push~~ done (`1b34264`, 2026-09-13).
-2. **He solves Aagaard 6.1–6.6** on the board (started 2026-09-13); misses show in Log → "to drill on the board" and as "again" in Drills.
-3. **`author_session.py --json`**: emit a stop-ply + diagnose + calculate skeleton with lines from PV1, so the next game starts from a draft. Keys still by hand.
-4. **Known limits worth fixing only if he hits them:**
+2. **He plays qVxKt9G0** on the Board tab (5 steps: stop-ply at move 25 → diagnose → 4 branches → the seventh rank at move 28 → log).
+3. **He solves Aagaard 6.1–6.6** on the board (started 2026-09-13); misses show in Log → "to drill on the board" and as "again" in Drills.
+4. **`author_session.py --json`**: emit a stop-ply + diagnose + calculate skeleton with lines from PV1, so the next game starts from a draft. Keys still by hand.
+5. **Known limits worth fixing only if he hits them:**
    - `solve` accepts only the book's main line; a sound side line he writes counts as leaving the line. Possible fix: optional `solve.alternatives[]`.
    - Variations are per browser (`localStorage`); JSON export is the backup.
    - The Today tab's day texts mention Aagaard ch.6 by hand.
