@@ -121,3 +121,28 @@ def test_stop_ply_splits_the_board_line(browser_page, app_url):
     assert page.input_value("input[name=scare]") == "Nxf5"
     assert page.input_value("input[name=continue]") == "16. gxf5 Bxf5 17. Bxf5"
     assert page.errors == []
+
+
+def test_progress_survives_a_reload(browser_page, app_url):
+    """Lock a step, reload, and it is still locked with the answer in the field."""
+    page = browser_page
+    page.goto(app_url(session=STOP_SESSION, tab="session"))
+    page.wait_for_selector("#boardTake")
+    fen = "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15"
+
+    play(page, fen, ["Qg3", "Nxf5", "gxf5", "Bxf5", "Bxf5", "Qxf5"])
+    page.click("#boardTake")
+    page.click("#boardLock")
+    assert page.is_disabled("#boardLock"), "the full line locks the step"
+    page.evaluate("async () => { await window.pathStore.settled(); }")
+
+    page.reload()
+    page.wait_for_selector("#boardTake")
+
+    assert page.is_disabled("#boardLock"), "still locked after the reload"
+    assert page.input_value("input[name=scare]") == "Nxf5"
+    # Resuming lands back on that step, so it reads "on"; it reads "done" from elsewhere.
+    assert page.locator("#boardSteps > *").first.get_attribute("class") == "on"
+    page.click("#boardNext")
+    assert page.locator("#boardSteps > *").first.get_attribute("class") == "done"
+    assert page.errors == []

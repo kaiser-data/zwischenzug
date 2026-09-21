@@ -29,6 +29,8 @@
   let stopPassed = false;
   let firstMiss = null;
   let stepStarted = 0;
+  // Saved progress for the open session: { at, logged, steps: { [stepId]: entry } }.
+  let progress = { at: "", logged: false, steps: {} };
   // Moves stepped back over, newest last. Only valid for the Chess object they came from,
   // so any `game = new Chess(...)` elsewhere drops them without extra bookkeeping.
   let future = [];
@@ -433,6 +435,13 @@
       renderBranches();
     }
     locked[step] = true;
+    captureAnswers();
+    const entry = entryFor(stepId(step));
+    entry.locked = true;
+    entry.passed = stopPassed;
+    entry.branches = (cur().branches || []).filter(function (b, i) { return branchLocked[i]; })
+      .map(function (b) { return b.id; });
+    saveProgress();
     const key = document.getElementById("boardKey");
     key.innerHTML = (s.branches && s.branches.length ? key.innerHTML : "") + (s.key || "");
     key.classList.add("show");
@@ -466,17 +475,75 @@
     }
   }
 
+  function stepId(n) {
+    const s = steps()[n] || {};
+    return s.id || ("step" + n);
+  }
+
+  function entryFor(id) {
+    if (!progress.steps[id]) {
+      progress.steps[id] = { locked: false, passed: false, answers: {}, branches: [] };
+    }
+    return progress.steps[id];
+  }
+
+  // The form is rebuilt by renderSteps, so answers are read out before leaving a step.
+  function captureAnswers() {
+    const form = document.getElementById("boardForm");
+    if (!form || !session) return;
+    const answers = {};
+    Array.from(form.elements).forEach(function (el) {
+      if (el.name) answers[el.name] = el.value;
+    });
+    entryFor(stepId(step)).answers = answers;
+  }
+
+  function restoreAnswers(entry) {
+    const form = document.getElementById("boardForm");
+    if (!form) return;
+    Object.keys(entry.answers || {}).forEach(function (name) {
+      const el = form.elements[name];
+      if (el && typeof el.value === "string") el.value = entry.answers[name];
+    });
+  }
+
+  function saveProgress() {
+    if (!sessionId || typeof window.pathProgress !== "object") return;
+    progress.at = stepId(step);
+    // Visiting a step creates an entry; storing the empty ones would grow the blob
+    // for nothing and keep a session "started" that was only looked at.
+    Object.keys(progress.steps).forEach(function (id) {
+      const e = progress.steps[id];
+      const empty = !e.locked && !e.passed && !e.branches.length
+        && !Object.keys(e.answers || {}).some(function (k) { return String(e.answers[k] || "").trim(); });
+      if (empty) delete progress.steps[id];
+    });
+    window.pathProgress.set(sessionId, progress);
+  }
+
   function loadStep(n) {
     step = n;
     activeBranch = 0;
-    stopPassed = false;
     firstMiss = null;
     stepStarted = Date.now();
-    branchLocked = (cur().branches || []).map(function () { return false; });
+    const entry = entryFor(stepId(n));
+    stopPassed = !!entry.passed;
+    branchLocked = (cur().branches || []).map(function (b) {
+      return entry.branches.indexOf(b.id) !== -1;
+    });
+    locked[n] = !!entry.locked;
     game = new Chess(cur().fen);
     selected = null;
     renderSteps();
+    restoreAnswers(entry);
+    if (locked[n]) {
+      const key = document.getElementById("boardKey");
+      key.innerHTML = (cur().branches || []).map(function (b) { return b.key || ""; }).join("")
+        + (cur().key || "");
+      key.classList.add("show");
+    }
     renderBoard();
+    saveProgress();
   }
 
   function renderPicker() {
@@ -509,14 +576,23 @@
   function loadSession(id) {
     sessionId = id;
     session = id ? sessions()[id] : null;
-    locked = steps().map(function () { return false; });
+    progress = (typeof window.pathProgress === "object" && id)
+      ? window.pathProgress.get(id)
+      : { at: "", logged: false, steps: {} };
+    locked = steps().map(function (s, i) {
+      const e = progress.steps[stepId(i)];
+      return !!(e && e.locked);
+    });
     renderPicker();
     if (!session) {
       document.getElementById("boardTitle").textContent = "No session loaded";
       document.getElementById("boardPrompt").textContent = "Add sessions/*.json and run python3 scripts/bundle_sessions.py";
       return false;
     }
-    loadStep(0);
+    // Resume where he was; an id that no longer exists falls back to the first step.
+    let at = 0;
+    steps().forEach(function (s, i) { if (stepId(i) === progress.at) at = i; });
+    loadStep(at);
     return true;
   }
 
