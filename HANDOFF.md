@@ -13,8 +13,8 @@ This replaces the 2026-09-13 handoff. The dossier exists and trains calculation.
 
 | | |
 |---|---|
-| Last pushed commit | `f6c4a77` Merge the storage-layer split |
-| **Uncommitted** | `sessions/qVxKt9G0.json` (game 3) + regenerated `sessions/bundle.js` — not committed, waiting for **go** |
+| Last pushed commit | branch `hosted/dossier-split`: game 3 + board navigation tasks 1–4. `main` unchanged at `f6c4a77` |
+| **In progress** | Board navigation tasks 5–7 (Redo, board orientation, docs) — plan in `docs/superpowers/plans/2026-09-21-board-step-navigation.md` |
 | Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) |
 | Private, gitignored | `books/` (Aagaard PDF, page renders, `ch6/check.html`, `ch6/build_sessions.py`), `sessions/private/` (24 drills `aagaard-6-01` … `24` + `bundle.js`) |
 | Player's progress | qVxKt9G0 built 2026-09-21, not yet played on the board. Simul date/time: 19.09.2026, start time is a placeholder (19:00) until he confirms. Played through XbhWoWMi. Aagaard ch.6 drills built; he confirmed all 24 transcribed positions match the book. He has not logged any exercise yet. |
@@ -44,7 +44,7 @@ His words — keep them in the UI, do not replace them with eval:
 - Game 2: "I was seeing it but thought I can recapture and win a piece."
 - Game 3 (his answer, 2026-09-21): at 25…Ra7 he saw 26.Re8+, held it harmless, and stopped at …Kf7.
 
-Game 3 context (club report, `sc-weisse-dame.de`): Jubiläumssimultan for 75 years SC Weisse Dame, GM Robert Rabiega (DWZ 2421) **17:2 (+15 =4 −0)** over nineteen boards, ~4.5 hours, no clock but move when he arrives, everyone above DWZ 1800 got Black. Martin (listed DWZ 2108) was one of four players who drew; nobody won. The half point is a result, not a rescue — the session says so in the log key.
+Game 3 context (club report, `sc-weisse-dame.de`): Jubiläumssimultan for 75 years SC Weisse Dame, GM Robert Rabiega (DWZ 2421) **17:2 (+15 =4 −0)** over nineteen boards, ~4.5 hours, no clock but move when he arrives, everyone above DWZ 1800 got Black. Martin (listed DWZ 2108) was one of four players who drew; nobody won. **But his draw was offered by the GM in a lost position** (about +5 at move 45; lost from 31…c5) — his words, 2026-09-21: "position at the end was lost, was lucky that the GM offered a draw". The log step tags the game, not the result. Lesson for authoring: the PGN ended at move 45 without a result; ask how a game ended before writing about the ending.
 
 ---
 
@@ -110,6 +110,7 @@ Keys are teaching sentences, never "cp=-17". `session-board.js` stays generic: a
 1. `curl -H "Accept: application/x-chess-pgn" "https://lichess.org/game/export/<first 8 chars>?evals=true&clocks=true"`. A 12-char URL is the player-specific link; the game id is the first 8. Refuse blitz as a main session (15+10 and slower is fine).
 2. Scan evals **and clocks**. Find the first position that went wrong for *him* — not the opponent's blunder, not the conversion.
 3. Ask him (AskUserQuestion) where it felt wrong and what was in his head. His answer changes the session: in game 2 he did not miss the capture, he stopped one ply short.
+   **Also ask how it ended** when the PGN is imported, unterminated, or stops in a position the engine calls decisive. A draw offer, a resignation or a flag look the same in a PGN. Game 3's "draw" was the GM's offer at +5 — the first draft praised a defence that never happened.
 4. Stockfish offline: `python3 scripts/author_session.py --fen 'FEN' --lines C1,C2,C3 --depth 20 --mpv 5`.
 5. Write `sessions/<id>.json`: stop-ply step → diagnose → calculate (≥3 branches: skipped line, the move he played, the sound alternative) → trap/clock step if there was a blunder → log step.
 6. Verify lines with python-chess, bundle, test in the browser (§7), then tell him what to do on the board.

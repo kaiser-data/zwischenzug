@@ -6,7 +6,7 @@
   "result": "1/2-1/2",
   "event": "Jubiläumssimultan 75 Jahre SC Weisse Dame · GM Robert Rabiega (DWZ 2421) · no clock, move when he arrives",
   "startFen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
-  "logNote": "Simul 19.09.26, one of only four draws in Rabiega 17:2 (+15 =4 -0). Saw 26.Re8+ Kf7 and stopped there; 27.Rc8! wins c6. Then 28…Ra6 handed over the seventh (29.Rb7! was winning). Held the opposite-bishop ending from a lost position.",
+  "logNote": "Simul 19.09.26 vs GM Rabiega, ½ — offered by the GM in a lost position (about +5 at move 45). Saw 26.Re8+ Kf7 and stopped there; 27.Rc8! wins c6. Then 28…Ra6 handed over the seventh (29.Rb7! was winning). Lost from 31…c5 on.",
   "steps": [
     {
       "id": "onemore",
@@ -142,8 +142,8 @@
     {
       "id": "log",
       "name": "5 Log",
-      "title": "A draw worth having, honestly tagged",
-      "prompt": "You held a position the engine had given up on. Say why it was still a draw — and what put you there.",
+      "title": "A draw you were given, honestly tagged",
+      "prompt": "The result says ½. The board at the end says lost. Tag the game, not the result.",
       "fen": "8/6pk/3R1p2/P2p3p/2bB3P/5PK1/1P4P1/3r4 w - - 13 46",
       "mustPlay": [],
       "questions": [
@@ -160,9 +160,9 @@
           ]
         },
         {
-          "name": "draw",
-          "label": "5.2 The a-pawn never queened. Which square made that certain, and which piece owns it?",
-          "hint": "Look at the colour of your bishop.",
+          "name": "lost",
+          "label": "5.2 The result says ½. From which move was the position lost?",
+          "hint": "The evaluation crosses two pawns once and never comes back.",
           "type": "text"
         },
         {
@@ -175,7 +175,6 @@
             { "value": "time", "label": "time" },
             { "value": "conversion", "label": "conversion" },
             { "value": "opening", "label": "opening" },
-            { "value": "defence", "label": "defence" },
             { "value": "clean", "label": "clean" }
           ]
         },
@@ -185,7 +184,7 @@
           "type": "textarea"
         }
       ],
-      "key": "<p><b>Rabiega finished 17:2 (+15 =4 -0) over nineteen boards.</b> Four players held him and nobody beat him — you were one of the four. Tag it honestly, but tag the half point as a result, not as a rescue.</p><p>Tag <b>calculation</b>. The opening was fine and the middlegame was level right up to move 25 — the whole game turned on two rook moves, and both times the move you did not make was the opponent's entry move.</p><p><b>a8 is a light square, and your bishop is light-squared.</b> That is the draw: with bishops of opposite colour, the a-pawn can never step onto a8 while the bishop lives. You defended a lost position correctly for twenty moves — the half point is real work, not luck.</p><p>Game 1: you stopped at the reply you disliked (…a6). Game 2: you stopped at the recapture you liked (Bxf5). Here: you stopped at <b>the move that looked fine</b> (…Kf7). Three games, one habit. The move after the one that looks fine is the move.</p><p><b>No clock, but he arrives and you must move.</b> That is the argument for the habit, not against it: when there is no time to calculate deep, the one question that still fits is <i>where does his rook come in?</i> — c8 on move 25, b7 on move 28. Ask it first and both moves choose themselves.</p>"
+      "key": "<p><b>The half point was offered, not earned.</b> At move 45 White is more than five pawns up and the a-pawn is running. Late in a four-and-a-half-hour simul a GM offers draws to finish the evening. Rabiega's 17:2 (+15 =4 -0) is his statistic; do not file this as a defence.</p><p><b>Lost from 31…c5.</b> Before it you were a pawn worse and suffering; after 32.dxc5 bxc5 33.Rxc5 you were two pawns down with nothing for them. Before that, 28…Ra6 had already given up the seventh, and 25…Ra7 had started it.</p><p>Tag <b>calculation</b>. The opening was fine and the middlegame was level right up to move 25 — the whole game turned on two rook moves, and both times the move you did not make was the opponent's entry move.</p><p>Game 1: you stopped at the reply you disliked (…a6). Game 2: you stopped at the recapture you liked (Bxf5). Here: you stopped at <b>the move that looked fine</b> (…Kf7). Three games, one habit. The move after the one that looks fine is the move.</p><p><b>No clock, but he arrives and you must move.</b> That is the argument for the habit, not against it: when there is no time to calculate deep, the one question that still fits is <i>where does his rook come in?</i> — c8 on move 25, b7 on move 28. Ask it first and both moves choose themselves.</p>"
     }
   ]
 }
