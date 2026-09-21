@@ -63,7 +63,7 @@
       "id": "calculate",
       "name": "3 Calculate",
       "title": "Four rook moves from move 25. Play each one to the end.",
-      "prompt": "Open a branch, play every move, lock it. Next stays closed until all four are done.",
+      "prompt": "Open a branch, play every move, lock it. The step's key opens once all four are locked.",
       "fen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
       "questions": [
         {

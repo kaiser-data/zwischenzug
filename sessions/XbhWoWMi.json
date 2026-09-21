@@ -48,7 +48,7 @@
       "id": "calculate",
       "name": "3 Calculate",
       "title": "Four lines from move 15. Count to the end of the captures.",
-      "prompt": "Open a branch. Play every move, including the one you stopped before. Lock that branch. Next stays closed until all four are done.",
+      "prompt": "Open a branch. Play every move, including the one you stopped before. Lock that branch. The step's key opens once all four are locked.",
       "fen": "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15",
       "questions": [
         { "name": "whynot", "label": "After 15.Qg3 Nxf5 gxf5 Bxf5, why not 17.Bxf5?", "type": "textarea" },

@@ -53,7 +53,7 @@
       "id": "calculate",
       "name": "3 Calculate",
       "title": "Four lines. Same capture is not the same eval.",
-      "prompt": "Open a branch. Play the moves on the board. Lock that branch. Next stays closed until all four are done.",
+      "prompt": "Open a branch. Play the moves on the board. Lock that branch. The step's key opens once all four are locked.",
       "fen": "r4rk1/p3ppbp/1p4p1/qB1bP3/8/7P/PB2QPP1/1R2R1K1 w - - 2 20",
       "questions": [
         { "name": "retreats", "label": "After 20.a4 a6, three legal squares that keep Bb5", "type": "triple", "names": ["sq1", "sq2", "sq3"] },

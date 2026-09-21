@@ -14,7 +14,7 @@ This replaces the 2026-09-13 handoff. The dossier exists and trains calculation.
 | | |
 |---|---|
 | Last pushed commit | branch `hosted/dossier-split`: game 3 + board navigation tasks 1–4. `main` unchanged at `f6c4a77` |
-| **In progress** | Board navigation tasks 5–7 (Redo, board orientation, docs) — plan in `docs/superpowers/plans/2026-09-21-board-step-navigation.md` |
+| **Board navigation** | Done 2026-09-21: clickable steps, progress across reloads, Redo, board orientation. Spec + plan in `docs/superpowers/` |
 | Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) |
 | Private, gitignored | `books/` (Aagaard PDF, page renders, `ch6/check.html`, `ch6/build_sessions.py`), `sessions/private/` (24 drills `aagaard-6-01` … `24` + `bundle.js`) |
 | Player's progress | qVxKt9G0 built 2026-09-21, not yet played on the board. Simul date/time: 19.09.2026, start time is a placeholder (19:00) until he confirms. Played through XbhWoWMi. Aagaard ch.6 drills built; he confirmed all 24 transcribed positions match the book. He has not logged any exercise yet. |
@@ -57,13 +57,15 @@ One file app: `index.html` + `session-board.js` + `pieces.js` (CBurnett) + `ches
 **Board tab**
 - Game picker (optgroups by `group`, newest first by `date`; `?session=<id>` wins).
 - Step types, all schema-driven (§4):
-  - default: questions + `mustPlay` on the board, optional `branches[]` (Next closed until every branch is played; after a lock the board opens the next unplayed branch and names it).
+  - default: questions + `mustPlay` on the board, optional `branches[]` (the step's key opens only when every branch is locked; after a lock the board opens the next unplayed branch and names it).
   - `stopPly`: name the reply that stopped you, write the moves after it. Grades "that is ply 1", "you stopped at ply N", mix-up (plays a contrast board + key), illegal / off-line ply. Then the line must be played on the board.
   - `solve`: write the whole line from move one; graded ply by ply against `solve.line` (wrong candidate / stopped at ply N / leaves the line / illegal or ambiguous SAN). First miss auto-logs to the Aagaard log via `logAs`.
 - **Use board line** (under the answer box of a `stopPly` / `solve` step): writes the line on the board — moves played plus moves stepped back over — into the answer box as numbered SAN, so nothing is typed twice. The grader is unchanged; a `Show`n or saved line can go in the same way with **Use as answer**. On a miss in a board-entered line the board rewinds to the ply that went wrong and the rest stays ahead (▶), so the position and the message agree. On a pass, Lock replays the line instead of asking for it again. Enter in an answer box locks (the form no longer reloads the page).
 - The solution line stays hidden from the status bar until the written line passes.
 - Optional book diagram next to the board (`image`, `caption`, `links[]`), collapsible; open/closed is remembered (`localStorage` `zwischenzug_figure_open`).
 - Navigation ⏮ ◀ ▶ ⏭ and keys ← → (step), ↑ start, ↓ end. Back keeps the moves, forward replays; playing the remembered move keeps the rest, any other move drops it. Keys are ignored while typing.
+- **Steps:** the strip above the board is clickable — any step, any time, in both directions, and Next no longer waits for a lock. Jumping shows the same empty form a first visit shows; a key still appears only on Lock. **↺ Redo** reopens a locked step (answers and key go, the Aagaard log row stays — one row per drill).
+- **Orientation:** ⇅ or `f` turns the board. The side at the bottom comes from the session's `startFen`, so a game played as Black opens from Black's side and does not spin between steps. A manual flip lasts until another session is loaded.
 - **Variations:** Save line (+ comment) per `sessionId:stepId`; Show (loads it at the start position to step through), Copy (numbered SAN), Delete; **Copy PGN** merges all lines into main line + side lines with `[SetUp]`/`[FEN]` headers and comments. Verified with python-chess. Board stays playable after Lock.
 - **Lichess analysis** link: current board FEN on `lichess.org/analysis/standard/…` (`?color=black` if Black starts). Disabled until Lock — "engine after your own line".
 
@@ -71,7 +73,7 @@ One file app: `index.html` + `session-board.js` + `pieces.js` (CBurnett) + `ches
 
 **Log tab:** session log, slow games (Board sessions append via `pathLogGame`), **Aagaard log** (chapter, exercise, minutes, full / short at ply N / wrong / none, note; summary lists what still needs a drill), JSON export/import of all state.
 
-**Storage:** `store.js` owns the state and the backend. `PathStore.local()` keeps one JSON blob in `localStorage` under `chess_path_to_v1`; reads are synchronous off the cached object, `hydrate()` runs once at boot and `commit()` persists. The page exposes `window.pathStore`. Page hooks are unchanged: `pathLogGame`, `pathLogAagaard`, `pathVariations.get/set`, `pathOpenSession`, `initPathBoard`.
+**Storage:** `store.js` owns the state and the backend. `PathStore.local()` keeps one JSON blob in `localStorage` under `chess_path_to_v1`; reads are synchronous off the cached object, `hydrate()` runs once at boot and `commit()` persists. The page exposes `window.pathStore`. Board progress lives in `state.progress[sessionId]` — `{ at, logged, steps }`, keyed by **step id** so re-authoring a session can only retire an entry, never move a ✓ onto a different step. `window.pathProgress.get/set` is the hook; the session resumes at `at`. Page hooks: `pathLogGame`, `pathLogAagaard`, `pathVariations.get/set`, `pathProgress.get/set`, `pathOpenSession`, `initPathBoard`.
 
 Two behaviours that are not obvious from the call sites:
 
@@ -156,7 +158,7 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
 ## 8. Next (in order)
 
 1. ~~Push~~ done (`1b34264`, 2026-09-13).
-2. **He plays qVxKt9G0** on the Board tab (5 steps: stop-ply at move 25 → diagnose → 4 branches → the seventh rank at move 28 → log).
+2. **He plays qVxKt9G0** on the Board tab (5 steps: stop-ply at move 25 → diagnose → 4 branches → the seventh rank at move 28 → log). It opens from Black's side.
 3. **He solves Aagaard 6.1–6.6** on the board (started 2026-09-13); misses show in Log → "to drill on the board" and as "again" in Drills.
 4. **`author_session.py --json`**: emit a stop-ply + diagnose + calculate skeleton with lines from PV1, so the next game starts from a draft. Keys still by hand.
 5. **Known limits worth fixing only if he hits them:**

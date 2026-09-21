@@ -93,7 +93,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four lines. Same capture is not the same eval.",
-        "prompt": "Open a branch. Play the moves on the board. Lock that branch. Next stays closed until all four are done.",
+        "prompt": "Open a branch. Play the moves on the board. Lock that branch. The step's key opens once all four are locked.",
         "fen": "r4rk1/p3ppbp/1p4p1/qB1bP3/8/7P/PB2QPP1/1R2R1K1 w - - 2 20",
         "questions": [
           {
@@ -350,7 +350,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four lines from move 15. Count to the end of the captures.",
-        "prompt": "Open a branch. Play every move, including the one you stopped before. Lock that branch. Next stays closed until all four are done.",
+        "prompt": "Open a branch. Play every move, including the one you stopped before. Lock that branch. The step's key opens once all four are locked.",
         "fen": "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15",
         "questions": [
           {
@@ -626,7 +626,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four rook moves from move 25. Play each one to the end.",
-        "prompt": "Open a branch, play every move, lock it. Next stays closed until all four are done.",
+        "prompt": "Open a branch, play every move, lock it. The step's key opens once all four are locked.",
         "fen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
         "questions": [
           {
