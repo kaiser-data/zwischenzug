@@ -415,3 +415,43 @@ def test_locked_branches_survive_a_reload(browser_page, app_url):
     assert "✓" in page.locator("#branchList button").first.inner_text()
     assert "on" in (page.locator("#branchList button").nth(1).get_attribute("class") or "")
     assert page.errors == []
+
+
+SPOKEN = [
+    ("Springer schlägt c3", "Nxc3"),
+    ("Dame h8 Schach", "Qh8+"),
+    ("König e7", "Ke7"),
+    ("Läufer schlägt c6 Schach, Bauer b schlägt c6", "Bxc6+ bxc6"),
+    ("e schlägt d5", "exd5"),
+    ("Springer b d7", "Nbd7"),
+    ("kurze Rochade", "O-O"),
+    ("Rochade lang", "O-O-O"),
+    ("e8 Dame", "e8=Q"),
+    ("Dame c7 matt", "Qc7#"),
+    ("Sf3 Lxc6+ Dxg7 Txe8+", "Nf3 Bxc6+ Qxg7 Rxe8+"),
+    ("knight takes c3 queen to h8 check", "Nxc3 Qh8+"),
+    ("Springer Zeh drei", "Nc3"),
+    ("13. Qd4 Ne4 14. Qxg7", "Qd4 Ne4 Qxg7"),
+    ("15. Nxc33", "Nxc33"),                     # unknown stays, so the grader can call it illegal
+]
+
+
+@pytest.mark.parametrize("spoken,san", SPOKEN)
+def test_spoken_moves_become_san(browser_page, app_url, spoken, san):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    assert page.evaluate("t => window.pathSpokenToSan(t)", spoken) == san
+
+
+def test_a_dictated_line_solves_the_step(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=left]", "Qualität und Bauer")
+    page.fill("input[name=line]", "Dame d4 Springer e4, Dame schlägt g7 Springer schlägt d6. "
+                                  "Dame h8 Schach König e7 Dame c8 Turm c8")
+
+    page.press("input[name=line]", "Enter")
+
+    assert page.is_visible("#boardKey"), page.inner_text("#boardErr")
+    assert page.errors == []

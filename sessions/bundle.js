@@ -394,7 +394,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four lines. Same capture is not the same eval.",
-        "prompt": "Open a branch. Play the moves on the board. Lock that branch. The step's key opens once all four are locked.",
+        "prompt": "Three branches show only the first moves \u2014 write the rest before you touch the board (Enter checks it). The one marked ?? you play through. The step's key opens once all four are locked.",
         "fen": "r4rk1/p3ppbp/1p4p1/qB1bP3/8/7P/PB2QPP1/1R2R1K1 w - - 2 20",
         "questions": [
           {
@@ -422,6 +422,21 @@ window.PATH_SESSIONS = {
         "branches": [
           {
             "id": "main",
+            "write": true,
+            "given": 2,
+            "ask": "the reply you disliked \u2014 go on",
+            "alts": [
+              [
+                "a4",
+                "a6",
+                "Bc4"
+              ],
+              [
+                "a4",
+                "a6",
+                "Bd3"
+              ]
+            ],
             "label": "a4 a6 Bd7 Bxg2 e6",
             "mustPlay": [
               "a4",
@@ -443,6 +458,9 @@ window.PATH_SESSIONS = {
           },
           {
             "id": "bd4",
+            "write": true,
+            "given": 1,
+            "ask": "what does Black take?",
             "label": "Bd4 Qxa2",
             "mustPlay": [
               "Bd4",
@@ -452,6 +470,9 @@ window.PATH_SESSIONS = {
           },
           {
             "id": "red1",
+            "write": true,
+            "given": 1,
+            "ask": "Black's answer",
             "label": "Red1 Rfd8",
             "mustPlay": [
               "Red1",
@@ -652,7 +673,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four lines from move 15. Count to the end of the captures.",
-        "prompt": "Open a branch. Play every move, including the one you stopped before. Lock that branch. The step's key opens once all four are locked.",
+        "prompt": "The first branch shows only Qg3 \u2014 write the whole count, including the move you stopped before (Enter checks it). The others you play through. The step's key opens once all four are locked.",
         "fen": "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15",
         "questions": [
           {
@@ -669,6 +690,9 @@ window.PATH_SESSIONS = {
         "branches": [
           {
             "id": "count",
+            "write": true,
+            "given": 1,
+            "ask": "count f5 to the last capture",
             "label": "Qg3 Nxf5 gxf5 Bxf5 Bxf5 Qxf5",
             "mustPlay": [
               "Qg3",
@@ -718,7 +742,7 @@ window.PATH_SESSIONS = {
         "id": "trap",
         "name": "4 Clock",
         "title": "After 31\u2026Qe3+, White to move (1:42 left)",
-        "prompt": "Three king moves draw. One loses. Play the game move and the check that punishes it.",
+        "prompt": "Three king moves draw. One loses. For 32.Kg2 write what follows to the end; the other king move you play through.",
         "fen": "6n1/ppp3k1/5pPp/3Q4/3P4/2PBq3/P1P5/6K1 w - - 1 32",
         "questions": [
           {
@@ -740,6 +764,17 @@ window.PATH_SESSIONS = {
         "branches": [
           {
             "id": "kg2",
+            "write": true,
+            "given": 1,
+            "ask": "Black to move",
+            "alts": [
+              [
+                "Kg2",
+                "Qg5+",
+                "Qxg5",
+                "fxg5"
+              ]
+            ],
             "label": "Kg2 Qg5+ Qxg5 hxg5 (game)",
             "mustPlay": [
               "Kg2",
@@ -929,7 +964,7 @@ window.PATH_SESSIONS = {
         "id": "calculate",
         "name": "3 Calculate",
         "title": "Four rook moves from move 25. Play each one to the end.",
-        "prompt": "Open a branch, play every move, lock it. The step's key opens once all four are locked.",
+        "prompt": "Two branches show only the first moves \u2014 write the rest before you touch the board (Enter checks it). The other two you play through. The step's key opens once all four are locked.",
         "fen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
         "questions": [
           {
@@ -946,6 +981,43 @@ window.PATH_SESSIONS = {
         "branches": [
           {
             "id": "punish",
+            "write": true,
+            "given": 3,
+            "ask": "White's strongest",
+            "alts": [
+              [
+                "Ra7",
+                "Re8+",
+                "Kf7",
+                "Rc8",
+                "Rb7",
+                "Rxc6"
+              ],
+              [
+                "Ra7",
+                "Re8+",
+                "Kf7",
+                "Rc8",
+                "h5",
+                "Rxc6"
+              ],
+              [
+                "Ra7",
+                "Re8+",
+                "Kf7",
+                "Rc8",
+                "g5",
+                "Rxc6"
+              ],
+              [
+                "Ra7",
+                "Re8+",
+                "Kf7",
+                "Rc8",
+                "Bb5",
+                "Rb8"
+              ]
+            ],
             "label": "Ra7 Re8+ Kf7 Rc8 Bc4 Rxc6",
             "mustPlay": [
               "Ra7",
@@ -984,6 +1056,23 @@ window.PATH_SESSIONS = {
           },
           {
             "id": "trade",
+            "write": true,
+            "given": 1,
+            "ask": "is it a trade?",
+            "alts": [
+              [
+                "Re8",
+                "Rxe8+",
+                "Kf7",
+                "Re1"
+              ],
+              [
+                "Re8",
+                "Rxe8+",
+                "Kf7",
+                "Re3"
+              ]
+            ],
             "label": "Re8 Rxe8+ Kf7 Re7+",
             "mustPlay": [
               "Re8",

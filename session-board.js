@@ -193,7 +193,7 @@
     const n = (b.mustPlay || []).length;
     host.innerHTML = "<label>Your line after " + esc(numbered(cur().fen, b.mustPlay.slice(0, givenOf(b)))) +
       "<span>Both sides, to the last capture or check. On the board it is checked at " + n + " ply; stopping earlier, press Lock.</span>" +
-      "<input name='line' type='text' autocomplete='off'></label>" + takeButton();
+      "<input name='line' type='text' autocomplete='off' placeholder='" + SPEAK + "'></label>" + takeButton();
     const take = document.getElementById("boardTake");
     if (take) take.addEventListener("click", function () { fillAnswer(boardLine()); });
   }
@@ -292,7 +292,7 @@
     return "<label>After " + esc(sp.candidate) + ", which reply stopped you?<span>One move.</span>" +
       "<input name='scare' type='text' required></label>" +
       "<label>Now the moves after it<span>In order, until nothing can take back or check.</span>" +
-      "<input name='continue' type='text'></label>" + takeButton();
+      "<input name='continue' type='text' placeholder='" + SPEAK + "'></label>" + takeButton();
   }
 
   // Board entry for written lines: one click copies the board's line into the answer; Lock still grades it.
@@ -328,7 +328,7 @@
   function renderSolve(sp) {
     const n = (sp.line || []).length;
     return "<label>Your line, from the first move<span>The " + (session && session.logAs ? "book's " : "") + "line is " + n + " ply. Calculate all of it first, then type it (Enter) or play it on the board — the board checks it at " + n + " ply. Stopping earlier? Press Lock.</span>" +
-      "<input name='line' type='text' required></label>" + takeButton();
+      "<input name='line' type='text' required placeholder='" + SPEAK + "'></label>" + takeButton();
   }
 
   // Grade a written line ply by ply against the main line and any accepted alternatives.
@@ -347,7 +347,7 @@
         return { ok: false, at: i, miss: { result: "short", ply: i },
           msg: "You stopped at ply " + i + ". " + noun + " is " + n + " ply. What happens next?" };
       }
-      const mv = g.move(have[i], { sloppy: true });
+      const mv = looseMove(g, have[i]);
       if (!mv) return { ok: false, at: i, msg: "Ply " + ply + ": " + have[i] + " is not legal there, or it is ambiguous (write Rexe5, R8xf6). Set it up on the board and look again." };
       const next = longer.filter(function (l) { return norm(l[i]) === norm(mv.san); });
       if (!next.length) {
@@ -381,8 +381,128 @@
     return startsWith(have, given) ? have : given.concat(have);
   }
 
+  // Spoken or dictated moves to SAN, German or English: "Springer schlägt c3 Schach" → "Nxc3+".
+  // German letters typed as SAN (Sf3, Lxc6+, Dxg7) too. SAN passes through; a word it does not
+  // know stays as it is, so the grader can call it illegal instead of the line silently shrinking.
+  const SPOKEN = {
+    piece: { springer: "N", pferd: "N", knight: "N", "läufer": "B", laeufer: "B", bishop: "B", turm: "R", rook: "R",
+      dame: "Q", queen: "Q", "könig": "K", koenig: "K", king: "K", bauer: "", pawn: "" },
+    take: { "schlägt": 1, schlaegt: 1, nimmt: 1, mal: 1, takes: 1, captures: 1, x: 1 },
+    suffix: { schach: "+", check: "+", "+": "+", matt: "#", schachmatt: "#", mate: "#", checkmate: "#", "#": "#" },
+    file: { a: "a", ah: "a", b: "b", be: "b", bee: "b", c: "c", ce: "c", zeh: "c", see: "c", sea: "c", d: "d", de: "d", dee: "d",
+      e: "e", ee: "e", f: "f", ef: "f", eff: "f", g: "g", ge: "g", gee: "g", h: "h", ha: "h", aitch: "h" },
+    rank: { "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", eins: "1", one: "1", zwei: "2", zwo: "2",
+      two: "2", drei: "3", three: "3", vier: "4", four: "4", "fünf": "5", fuenf: "5", five: "5", sechs: "6", six: "6",
+      sieben: "7", seven: "7", acht: "8", eight: "8" },
+    short: { kurze: 1, kurz: 1, kleine: 1, short: 1, kingside: 1 },
+    long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
+    castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
+    filler: { auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
+  };
+  // Dictation needs no button: macOS dictation (fn twice) types into any answer box.
+  const SPEAK = "Nxc3 Qh8+ … or dictate: Springer schlägt c3, Dame h8 Schach";
+  const SAN_RE = /^(O-O-O|O-O|[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](x[a-h])?[1-8](=?[QRBN])?)[+#]?$/;
+  const GERMAN_PIECE = { S: "N", L: "B", T: "R", D: "Q", K: "K" };
+
+  function spokenToSan(text) {
+    // Words to symbols: {k: "san"|"piece"|"take"|"suf"|"file"|"rank"|"sq"|"castle"|"raw", v}.
+    const syms = [];
+    String(text || "").replace(/…/g, " ").split(/[\s,;:]+/).forEach(function (raw) {
+      let t = raw.replace(/^\d+\.+/, "").replace(/[.!?]+$/, "");
+      if (!t || /^\d{2,}$/.test(t)) return;                       // move numbers
+      if (/^[a-h][1-8]$/.test(t)) { syms.push({ k: "sq", v: t }); return; }   // a square may belong to a spoken move
+      const zero = t.replace(/0/g, "O");
+      if (/^O-O(-O)?[+#]?$/.test(zero)) { syms.push({ k: "san", v: zero }); return; }
+      if (SAN_RE.test(t)) { syms.push({ k: "san", v: t }); return; }
+      const de = t.match(/^([SLTDK])([a-h]?[1-8]?x?[a-h][1-8][+#]?)$/);
+      if (de) { syms.push({ k: "san", v: GERMAN_PIECE[de[1]] + de[2] }); return; }
+      const deProm = t.match(/^([a-h](?:x[a-h])?[18])=?([DTLS])([+#]?)$/);
+      if (deProm) { syms.push({ k: "san", v: deProm[1] + "=" + GERMAN_PIECE[deProm[2]] + deProm[3] }); return; }
+      const w = t.toLowerCase();
+      if (/^[a-h][1-8]$/.test(w)) syms.push({ k: "sq", v: w });
+      else if (w in SPOKEN.piece) syms.push({ k: "piece", v: SPOKEN.piece[w] });
+      else if (w in SPOKEN.take) syms.push({ k: "take" });
+      else if (w in SPOKEN.suffix) syms.push({ k: "suf", v: SPOKEN.suffix[w] });
+      else if (w in SPOKEN.file) syms.push({ k: "file", v: SPOKEN.file[w] });
+      else if (w in SPOKEN.rank) syms.push({ k: "rank", v: SPOKEN.rank[w] });
+      else if (w in SPOKEN.short) syms.push({ k: "side", v: "O-O" });
+      else if (w in SPOKEN.long) syms.push({ k: "side", v: "O-O-O" });
+      else if (w in SPOKEN.castle) syms.push({ k: "castle" });
+      else if (!(w in SPOKEN.filler)) syms.push({ k: "raw", v: raw.replace(/^\d+\.+/, "") });
+    });
+    // "zeh" "drei" → c3; "kurze Rochade" / "Rochade lang" → castling.
+    const merged = [];
+    for (let i = 0; i < syms.length; i++) {
+      const a = syms[i], b = syms[i + 1];
+      if (a.k === "file" && b && b.k === "rank") { merged.push({ k: "sq", v: a.v + b.v }); i++; continue; }
+      if (a.k === "castle" || a.k === "side") {
+        const other = a.k === "castle" ? (b && b.k === "side" ? b : null) : (b && b.k === "castle" ? b : null);
+        const side = a.k === "side" ? a.v : other ? other.v : "O-O";
+        if (a.k === "side" && !other) continue;                   // a lone "long" is not a move
+        merged.push({ k: "san", v: side });
+        if (other) i++;
+        continue;
+      }
+      merged.push(a);
+    }
+    const moves = [];
+    let cur = null;
+    function flush() {
+      if (cur && cur.to) moves.push(cur.piece + cur.dis + (cur.cap ? "x" : "") + cur.to + (cur.promo ? "=" + cur.promo : "") + cur.suf);
+      else if (cur && (cur.piece || cur.dis)) moves.push(cur.piece + cur.dis + (cur.cap ? "x" : ""));
+      cur = null;
+    }
+    merged.forEach(function (m, i) {
+      const next = merged[i + 1];
+      if (m.k === "san" || m.k === "raw") { flush(); moves.push(m.v); return; }
+      if (m.k === "suf") {
+        if (cur) cur.suf = m.v;
+        else if (moves.length) moves[moves.length - 1] += m.v;
+        return;
+      }
+      if (m.k === "piece") {
+        // "e8 Dame": a pawn on the last rank takes the piece named next, unless a square follows.
+        const promotes = cur && cur.to && !cur.piece && /[18]$/.test(cur.to) && m.v && !(next && (next.k === "sq" || next.k === "file"));
+        if (promotes) { cur.promo = m.v; return; }
+        flush();
+        cur = { piece: m.v, dis: "", cap: false, to: "", promo: "", suf: "" };
+        return;
+      }
+      if (m.k === "take") {
+        if (!cur) cur = { piece: "", dis: "", cap: false, to: "", promo: "", suf: "" };
+        if (cur.to) { cur.dis = cur.to; cur.to = ""; }             // "Springer d7 schlägt e5"
+        cur.cap = true;
+        return;
+      }
+      if (m.k === "file" || m.k === "rank") {
+        if (cur && cur.to) flush();
+        if (!cur) cur = { piece: "", dis: "", cap: false, to: "", promo: "", suf: "" };
+        cur.dis += m.v;
+        return;
+      }
+      if (m.k === "sq") {
+        if (cur && cur.to) flush();
+        if (!cur) cur = { piece: "", dis: "", cap: false, to: "", promo: "", suf: "" };
+        cur.to = m.v;
+      }
+    });
+    flush();
+    return moves.join(" ");
+  }
+  window.pathSpokenToSan = spokenToSan;
+
+  // SAN from a person, not a program: a capture without x or a check without + is still the move,
+  // as long as only one legal move fits.
+  function looseMove(g, t) {
+    const exact = g.move(t, { sloppy: true });
+    if (exact) return exact;
+    const bare = function (m) { return m.replace(/[x+#=]/g, ""); };
+    const fits = g.moves().filter(function (m) { return bare(m) === bare(t); });
+    return fits.length === 1 ? g.move(fits[0]) : null;
+  }
+
   function tokens(text) {
-    return String(text || "")
+    return spokenToSan(text)
       .replace(/…/g, " ")
       .replace(/(^|\s)\d+\s*\.+/g, " ")
       .split(/[\s,;]+/)
@@ -420,7 +540,7 @@
       if (i >= rest.length) {
         return { ok: false, at: i + 2, msg: "You stopped at ply " + (ply - 1) + " (" + (i ? rest[i - 1] : sp.scare) + "). Can anything still capture or check? Keep going." };
       }
-      const mv = g.move(rest[i], { sloppy: true });
+      const mv = looseMove(g, rest[i]);
       if (!mv) return { ok: false, at: i + 2, msg: "Ply " + ply + ": " + rest[i] + " is not legal there. Set it up on the board and look again." };
       if (norm(mv.san) !== norm(cont[i])) {
         return { ok: false, at: i + 2, msg: "Ply " + ply + ": " + rest[i] + " is not the critical move. Look again from there." };
