@@ -64,7 +64,7 @@
       "id": "calculate",
       "name": "3 Calculate",
       "title": "Four rook moves from move 25. Play each one to the end.",
-      "prompt": "Open a branch, play every move, lock it. The step's key opens once all four are locked.",
+      "prompt": "Two branches show only the first moves — write the rest before you touch the board (Enter checks it). The other two you play through. The step's key opens once all four are locked.",
       "fen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
       "questions": [
         {
@@ -81,6 +81,10 @@
       "branches": [
         {
           "id": "punish",
+          "write": true,
+          "given": 3,
+          "ask": "White's strongest",
+          "alts": [["Ra7", "Re8+", "Kf7", "Rc8", "Rb7", "Rxc6"], ["Ra7", "Re8+", "Kf7", "Rc8", "h5", "Rxc6"], ["Ra7", "Re8+", "Kf7", "Rc8", "g5", "Rxc6"], ["Ra7", "Re8+", "Kf7", "Rc8", "Bb5", "Rb8"]],
           "label": "Ra7 Re8+ Kf7 Rc8 Bc4 Rxc6",
           "mustPlay": ["Ra7", "Re8+", "Kf7", "Rc8", "Bc4", "Rxc6"],
           "key": "<p class='bad'>The line you stopped two moves short of. A pawn down, both your remaining pawn islands loose, and the rook on a7 has nothing to do. This is a clear White advantage, not a nuance.</p>"
@@ -99,6 +103,10 @@
         },
         {
           "id": "trade",
+          "write": true,
+          "given": 1,
+          "ask": "is it a trade?",
+          "alts": [["Re8", "Rxe8+", "Kf7", "Re1"], ["Re8", "Rxe8+", "Kf7", "Re3"]],
           "label": "Re8 Rxe8+ Kf7 Re7+",
           "mustPlay": ["Re8", "Rxe8+", "Kf7", "Re7+"],
           "key": "<p class='bad'>Not a trade — <b>a check</b>. Your king is on g8 and cannot reach e8, so the rook is simply gone. The same one-ply habit in its crudest form: you look at the capture you like and not at the plus sign behind it.</p>"
