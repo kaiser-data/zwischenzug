@@ -299,6 +299,9 @@
   .aagaard-log { margin-top: 28px; padding-top: 18px; border-top: 1px solid rgba(28,23,18,.2); }
   .step-figure { margin: 0 0 12px; }
   .btn.nav { min-width: 44px; padding-left: 10px; padding-right: 10px; }
+  .btn.mic[aria-disabled="true"] { opacity: .45; }
+  .btn.mic.on { outline: 2px solid currentColor; outline-offset: 1px; }
+  .voice-heard { margin: 6px 0 0; min-height: 1.2em; }
   .btn:disabled, .btn.disabled { opacity: .45; cursor: default; }
   a.btn { display: inline-block; text-decoration: none; }
   .variations { margin-top: 18px; }
@@ -400,8 +403,11 @@
               <button class="btn ghost nav" type="button" id="boardEnd" title="End (↓)" aria-label="End">⏭︎</button>
               <button class="btn ghost nav" type="button" id="boardFlip" title="Flip the board (f)" aria-label="Flip the board" aria-pressed="false">⇅</button>
               <button class="btn ghost" type="button" id="boardReset">Reset position</button>
+              <button class="btn ghost nav mic" type="button" id="boardMic" aria-label="Hold to say one move" aria-disabled="true">🎤</button>
+              <button class="btn ghost nav" type="button" id="boardVoiceLang" title="Voice language">EN</button>
               <a class="btn ghost disabled" id="boardLichess" href="https://lichess.org/analysis" target="_blank" rel="noopener" aria-disabled="true">Lichess analysis</a>
             </div>
+            <p class="muted voice-heard" id="voiceHeard" aria-live="polite"></p>
             <div class="variations">
               <h3 class="serif">Variations</h3>
               <div class="var-save">

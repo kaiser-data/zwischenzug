@@ -385,7 +385,7 @@
   // German letters typed as SAN (Sf3, Lxc6+, Dxg7) too. SAN passes through; a word it does not
   // know stays as it is, so the grader can call it illegal instead of the line silently shrinking.
   const SPOKEN = {
-    piece: { springer: "N", pferd: "N", knight: "N", "läufer": "B", laeufer: "B", bishop: "B", turm: "R", rook: "R",
+    piece: { springer: "N", pferd: "N", spinner: "N", knight: "N", night: "N", knife: "N", nite: "N", "läufer": "B", laeufer: "B", bishop: "B", turm: "R", tom: "R", tor: "R", rook: "R",
       dame: "Q", queen: "Q", "könig": "K", koenig: "K", king: "K", bauer: "", pawn: "" },
     take: { "schlägt": 1, schlaegt: 1, nimmt: 1, mal: 1, takes: 1, captures: 1, x: 1 },
     suffix: { schach: "+", check: "+", "+": "+", matt: "#", schachmatt: "#", mate: "#", checkmate: "#", "#": "#" },
@@ -397,7 +397,7 @@
     short: { kurze: 1, kurz: 1, kleine: 1, short: 1, kingside: 1 },
     long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
-    undo: { "zurück": 1, zurueck: 1, back: 1, undo: 1, "rückgängig": 1 },
+    undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
     reset: { reset: 1, "zurücksetzen": 1, zuruecksetzen: 1, vorne: 1, vorn: 1, clear: 1, "löschen": 1 },
     filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
@@ -645,6 +645,113 @@
       }
     }, 250);
   }
+
+  // Voice: hold 🎤 (or the v key), say one move, let go. scripts/voice_server.py turns the audio into
+  // text on this machine; the text goes through the same spoken-move reader as a typed answer.
+  const VOICE_URL = window.PATH_VOICE_URL || "http://127.0.0.1:8766";
+  const VOICE_LANG_KEY = "zwischenzug_voice_lang";
+  const voice = { ready: false, stream: null, rec: null, chunks: [], started: 0 };
+
+  function voiceLang() {
+    try { return localStorage.getItem(VOICE_LANG_KEY) === "de" ? "de" : "en"; } catch (e) { return "en"; }
+  }
+
+  function setVoiceReady(ok) {
+    voice.ready = ok;
+    const btn = document.getElementById("boardMic");
+    if (!btn) return;
+    btn.setAttribute("aria-disabled", ok ? "false" : "true");
+    btn.title = ok ? "Hold and say one move (or hold v). Commands: back, reset"
+      : "Voice is off. Start it with: python3 scripts/voice_server.py";
+  }
+
+  function voiceCheck() {
+    if (typeof fetch !== "function") return;
+    fetch(VOICE_URL + "/health").then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { setVoiceReady(!!(j && j.ok)); }, function () { setVoiceReady(false); });
+  }
+
+  function heard(msg) {
+    const el = document.getElementById("voiceHeard");
+    if (el) el.textContent = msg;
+  }
+
+  function voiceStart() {
+    if (voice.rec) return;
+    if (!voice.ready) {
+      heard("Voice is off. In a terminal: python3 scripts/voice_server.py — then press 🎤 again.");
+      voiceCheck();
+      return;
+    }
+    const open = voice.stream ? Promise.resolve(voice.stream) : navigator.mediaDevices.getUserMedia({ audio: true });
+    open.then(function (stream) {
+      voice.stream = stream;
+      voice.chunks = [];
+      voice.rec = new MediaRecorder(stream);
+      voice.rec.ondataavailable = function (e) { if (e.data && e.data.size) voice.chunks.push(e.data); };
+      voice.rec.onstop = voiceSend;
+      voice.started = Date.now();
+      voice.rec.start();
+      document.getElementById("boardMic").classList.add("on");
+      heard("Listening…");
+    }, function () { heard("No microphone: allow it for this page in Chrome's address bar."); });
+  }
+
+  function voiceStop() {
+    if (voice.rec && voice.rec.state === "recording") voice.rec.stop();
+    document.getElementById("boardMic").classList.remove("on");
+  }
+
+  function voiceSend() {
+    const rec = voice.rec;
+    voice.rec = null;
+    if (Date.now() - voice.started < 300) { heard("Hold 🎤 while you speak."); return; }
+    const blob = new Blob(voice.chunks, { type: rec.mimeType });
+    heard("…");
+    fetch(VOICE_URL + "/transcribe?lang=" + voiceLang(), { method: "POST", body: blob, headers: { "Content-Type": rec.mimeType } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { voiceApply(j.text || ""); }, function () { setVoiceReady(false); heard("Voice server stopped."); });
+  }
+
+  // One utterance: a move (or a few), or a command. Into the answer box when the step takes a
+  // written line, so the board follows it and grades it; otherwise straight onto the board.
+  function voiceApply(text) {
+    const said = String(text || "").trim();
+    if (!said || /^[\[(].*[\])]$/.test(said)) { heard("Did not catch a move. Hold 🎤 and say it again."); return ""; }
+    const words = said.toLowerCase().replace(/[.,!?]/g, " ").trim().split(/\s+/);
+    const command = words.length <= 2 && words.some(function (w) { return w in SPOKEN.undo; }) ? "undo"
+      : words.length <= 2 && words.some(function (w) { return w in SPOKEN.reset; }) ? "reset" : null;
+    const san = spokenToSan(said);
+    if (takesLine()) {
+      const form = document.getElementById("boardForm");
+      const s = cur();
+      let box = form.elements.line;
+      if (s.type === "stopPly" && !writeBranch()) {
+        box = String(form.elements.scare.value).trim() || command ? form.elements["continue"] : form.elements.scare;
+        if (command && !String(box.value).trim()) box = form.elements.scare;
+      }
+      // Re-read the whole box so "back" / "reset" act on what is already written.
+      box.value = spokenToSan(box.value + " " + said);
+      followAnswer();
+      heard("Heard “" + said + "” → " + (command || san || "?"));
+      return box.value;
+    }
+    if (command === "undo") navigate("back");
+    else if (command === "reset") { game = new Chess(cur().fen); selected = null; renderBoard(); }
+    else {
+      const bad = san.split(" ").filter(Boolean).find(function (m) {
+        const move = looseMove(game, m);
+        if (move) keepFuture(move);
+        return !move;
+      });
+      renderBoard();
+      if (bad) { heard("Heard “" + said + "” → " + bad + " is not legal here."); return san; }
+      autoCheck();
+    }
+    heard("Heard “" + said + "” → " + (command || san));
+    return san;
+  }
+  window.pathVoiceApply = voiceApply;
 
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
   function autoCheck() {
@@ -1229,6 +1336,7 @@
       if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) return;
       if (e.key === "f") { e.preventDefault(); flipBoard(); return; }
+      if (e.key === "v") { e.preventDefault(); if (!e.repeat) voiceStart(); return; }
       const dir = { ArrowLeft: "back", ArrowRight: "fwd", ArrowUp: "start", ArrowDown: "end", Home: "start", End: "end" }[e.key];
       if (!dir) return;
       e.preventDefault();
@@ -1263,6 +1371,20 @@
     document.getElementById("boardLock").addEventListener("click", lockStep);
     document.getElementById("boardRedo").addEventListener("click", redoStep);
     document.getElementById("boardFlip").addEventListener("click", flipBoard);
+    const mic = document.getElementById("boardMic");
+    if (mic) {
+      mic.addEventListener("pointerdown", function (e) { e.preventDefault(); voiceStart(); });
+      ["pointerup", "pointerleave", "pointercancel"].forEach(function (t) { mic.addEventListener(t, voiceStop); });
+      const langBtn = document.getElementById("boardVoiceLang");
+      langBtn.textContent = voiceLang().toUpperCase();
+      langBtn.addEventListener("click", function () {
+        const next = voiceLang() === "en" ? "de" : "en";
+        try { localStorage.setItem(VOICE_LANG_KEY, next); } catch (e) { /* ignore */ }
+        langBtn.textContent = next.toUpperCase();
+      });
+      document.addEventListener("keyup", function (e) { if (e.key === "v") voiceStop(); });
+      voiceCheck();
+    }
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.
     document.getElementById("boardForm").addEventListener("submit", function (e) {
       e.preventDefault();

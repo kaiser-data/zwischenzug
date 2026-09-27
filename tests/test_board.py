@@ -516,3 +516,46 @@ def test_reset_word_clears_the_line(browser_page, app_url):
     assert page.evaluate(spoken, "Dame d4 Springer e4 reset Dame c1") == "Qc1"
     assert page.evaluate(spoken, "Dame d4 von vorne Turm e1") == "Re1"
     assert page.evaluate(spoken, "Qd4 Ne4 zurücksetzen") == ""
+
+
+def test_voice_goes_into_the_answer_box_and_the_board(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    apply = "t => window.pathVoiceApply(t)"
+
+    page.evaluate(apply, "Queen d4")
+    page.evaluate(apply, "Knife e four")                 # what the chess model sometimes hears
+    assert page.input_value("input[name=line]") == "Qd4 Ne4"
+    page.wait_for_timeout(400)
+    assert "Qd4 Ne4" in page.inner_text("#boardStatus")
+
+    page.evaluate(apply, "back")
+    assert page.input_value("input[name=line]") == "Qd4"
+    page.evaluate(apply, "reset")
+    assert page.input_value("input[name=line]") == ""
+    assert page.errors == []
+
+
+def test_voice_plays_on_the_board_when_there_is_no_answer_box(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 0)           # a replay step: the moves go on the board
+    page.evaluate("t => window.pathVoiceApply(t)", "knight e2")
+    assert "Ne2" in page.inner_text("#boardStatus")
+    page.evaluate("t => window.pathVoiceApply(t)", "zurück")
+    assert page.inner_text("#boardStatus").startswith("White to move · ▶ 1 more"), "stepped back"
+    page.evaluate("t => window.pathVoiceApply(t)", "king e5")
+    assert "not legal" in page.inner_text("#voiceHeard")
+    assert page.errors == []
+
+
+def test_mic_says_how_to_start_the_server_when_it_is_off(browser_page, app_url):
+    page = browser_page
+    page.add_init_script("window.PATH_VOICE_URL = 'http://127.0.0.1:9'")
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#boardMic")
+    page.wait_for_timeout(500)
+    assert page.get_attribute("#boardMic", "aria-disabled") == "true"
+
+    page.dispatch_event("#boardMic", "pointerdown")
+    assert "voice_server.py" in page.inner_text("#voiceHeard")
+    assert page.errors == []
