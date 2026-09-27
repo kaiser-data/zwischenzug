@@ -15,7 +15,8 @@ This replaces the 2026-09-13 handoff. The dossier exists and trains calculation.
 |---|---|
 | Last pushed commit | branch `hosted/dossier-split`: game 3 + board navigation tasks 1–4. `main` unchanged at `f6c4a77` |
 | **Board navigation** | Done 2026-09-21: clickable steps, progress across reloads, Redo, board orientation. Spec + plan in `docs/superpowers/` |
-| Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) |
+| Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) — all three `category: leak`; `6yfxgu80` (game 4, classical OTB 2026-09-27 in Oweide vs Torsten Hannebauer, won in 20, `category: clean`) |
+| **Game categories** | Added 2026-09-27: every game session carries `category` (§4); the category decides the follow-up (§5A step 3b). Shown above the board and in the picker's optgroups ("Games · Clean") |
 | Private, gitignored | `books/` (Aagaard PDF, page renders, `ch6/check.html`, `ch6/build_sessions.py`), `sessions/private/` (24 drills `aagaard-6-01` … `24` + `bundle.js`) |
 | Player's progress | qVxKt9G0 built 2026-09-21, not yet played on the board. Simul date/time: 19.09.2026, start time is a placeholder (19:00) until he confirms. Played through XbhWoWMi. Aagaard ch.6 drills built; he confirmed all 24 transcribed positions match the book. He has not logged any exercise yet. |
 
@@ -92,7 +93,7 @@ Source of truth: `sessions/<lichessId>.json` (public) or `sessions/private/<id>.
 python3 scripts/bundle_sessions.py   # writes sessions/bundle.js and sessions/private/bundle.js; fails on id clash
 ```
 
-Session: `id`, `url`, `title`, `date` ("YYYY-MM-DD HH:MM"), `result`, `event`, `startFen`, `logNote`, optional `group`, optional `logAs: {kind: "aagaard", chapter, exercise}`, `steps[]`.
+Session: `id`, `url`, `title`, `date` ("YYYY-MM-DD HH:MM"), `result`, `event`, `startFen`, `logNote`, optional `category` (`leak` | `clean` | `clock` | `gift`, games only — see §5A 3b; labels and follow-up lines live in `CATEGORIES` in `session-board.js`), optional `group`, optional `logAs: {kind: "aagaard", chapter, exercise}`, `steps[]`. A board-logged game carries the category into the Log.
 
 Step: `id`, `name`, `title`, `prompt`, `fen` (full FEN with the real move number), `questions[]`, `key` (HTML shown after Lock), optional `type` (`stopPly` | `solve`), `mustPlay[]`, `branches[]`, `image`, `caption`, `links[] {label, href}`.
 
@@ -113,6 +114,17 @@ Keys are teaching sentences, never "cp=-17". `session-board.js` stays generic: a
 2. Scan evals **and clocks**. Find the first position that went wrong for *him* — not the opponent's blunder, not the conversion.
 3. Ask him (AskUserQuestion) where it felt wrong and what was in his head. His answer changes the session: in game 2 he did not miss the capture, he stopped one ply short.
    **Also ask how it ended** when the PGN is imported, unterminated, or stops in a position the engine calls decisive. A draw offer, a resignation or a flag look the same in a PGN. Game 3's "draw" was the GM's offer at +5 — the first draft praised a defence that never happened.
+3b. **Classify the game by its lesson, not its result** — this picks the session shape:
+
+   | `category` | When | Follow-up (steps) |
+   |---|---|---|
+   | `leak` | He stopped calculating one ply early and it cost something | stop-ply → diagnose → calculate (≥3 branches) → trap/clock → log (step 5 below) |
+   | `clean` | Few or no mistakes of his own; the win came from the opponent's errors | **opening** (which opponent move gave the edge; own moves vs the engine's first choice) → **to the last capture** (`solve`: write the winning line to the final capture — he usually stops at the move he likes) → **his best tries** (branches: the opponent's alternatives at the decisive moment, incl. zwischenzug and mate traps) → **if he had defended** (the best defence one move earlier: how much was his) → log. Answer honestly whether it could have been shorter — often it could not |
+   | `clock` | The game was decided by time trouble | where the minutes went (clock scan) → the move the clock chose → log |
+   | `gift` | The result is better than the position (game 3's offered draw) | the moment it turned → the line that should have ended it → log; never praise the result |
+
+   A won game can be `leak` (game 1). If two fit, pick the one that cost the most. `6yfxgu80` is the template for `clean`.
+
 4. Stockfish offline: `python3 scripts/author_session.py --fen 'FEN' --lines C1,C2,C3 --depth 20 --mpv 5`.
 5. Write `sessions/<id>.json`: stop-ply step → diagnose → calculate (≥3 branches: skipped line, the move he played, the sound alternative) → trap/clock step if there was a blunder → log step.
 6. Verify lines with python-chess, bundle, test in the browser (§7), then tell him what to do on the board.
@@ -158,7 +170,8 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
 ## 8. Next (in order)
 
 1. ~~Push~~ done (`1b34264`, 2026-09-13).
-2. **He plays qVxKt9G0** on the Board tab (5 steps: stop-ply at move 25 → diagnose → 4 branches → the seventh rank at move 28 → log). It opens from Black's side.
+2. **He plays 6yfxgu80** (game 4, clean, White, 5 steps: opening after 7…Be6 → 13.Qd4 written to 16…Rxc8 → Black's four tries after 13.Qd4 → 12…Bd7 → log). At the board he saw 13.Qd4 only to Qxg7 / Qxh8+ (his answer, 2026-09-27). Played 2026-09-27 10:00 in Oweide vs Torsten Hannebauer (DWZ ~1950), classical OTB; he resigned after 20.Ng3+.
+2b. **He plays qVxKt9G0** on the Board tab (5 steps: stop-ply at move 25 → diagnose → 4 branches → the seventh rank at move 28 → log). It opens from Black's side.
 3. **He solves Aagaard 6.1–6.6** on the board (started 2026-09-13); misses show in Log → "to drill on the board" and as "again" in Drills.
 4. **`author_session.py --json`**: emit a stop-ply + diagnose + calculate skeleton with lines from PV1, so the next game starts from a draft. Keys still by hand.
 5. **Known limits worth fixing only if he hits them:**

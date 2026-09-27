@@ -1,10 +1,298 @@
 window.PATH_SESSIONS = {
+  "6yfxgu80": {
+    "id": "6yfxgu80",
+    "url": "https://lichess.org/6yfxgu80",
+    "title": "Classical vs Hannebauer \u00b7 you White \u00b7 French Winawer, exchange",
+    "date": "2026-09-27 10:00",
+    "result": "1-0",
+    "event": "Classical OTB \u00b7 Oweide \u00b7 vs Torsten Hannebauer (DWZ ~1950) \u00b7 resigned after 20.Ng3+",
+    "category": "clean",
+    "startFen": "r1q1k2r/pp1n1ppp/3Bb3/1Bnp4/8/2P5/P1P1NPPP/R2Q1RK1 w kq - 2 13",
+    "logNote": "Clean: 13.Qd4! the only knockout after 12\u2026Nfd7?; saw it to Qxg7/Qxh8+, not to 16\u2026Rxc8. Resigned after 20.Ng3+.",
+    "steps": [
+      {
+        "id": "opening",
+        "name": "1 Opening",
+        "title": "After 7\u2026Be6 \u00b7 where the edge came from",
+        "prompt": "Replay your moves 8\u201310 on the board. Then decide which Black move gave you the most \u2014 not which of yours was clever.",
+        "fen": "rn1qk1nr/pp3ppp/4b3/2Pp4/8/2PB4/P1P2PPP/R1BQK1NR w KQkq - 1 8",
+        "mustPlay": [
+          "Ne2",
+          "Nf6",
+          "Bf4",
+          "Nbd7",
+          "Bd6"
+        ],
+        "questions": [
+          {
+            "name": "material",
+            "label": "1.1 Material after 7\u2026Be6",
+            "hint": "Count c5.",
+            "type": "text"
+          },
+          {
+            "name": "concession",
+            "label": "1.2 Which Black move cost the most in the opening?",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "choose"
+              },
+              {
+                "value": "c5",
+                "label": "5\u2026c5"
+              },
+              {
+                "value": "bxc3",
+                "label": "6\u2026Bxc3+"
+              },
+              {
+                "value": "be6",
+                "label": "7\u2026Be6"
+              },
+              {
+                "value": "same",
+                "label": "about the same size"
+              }
+            ]
+          },
+          {
+            "name": "bd6",
+            "label": "1.3 What does 10.Bd6 take away from Black \u2014 and which later move needs exactly that?",
+            "type": "textarea"
+          }
+        ],
+        "key": "<p><b>Material:</b> a pawn up. The c5 pawn is still yours, and Black has given up the dark-squared bishop for your knight.</p><p><b>Concessions:</b> 6\u2026Bxc3+ and 7\u2026Be6 each cost Black about half a pawn \u2014 the same size. 6\u2026Nc6 or 6\u2026Nf6 would have won c5 back quietly; after the trade on c3 Black owns no dark bishop, and 7\u2026Be6 (instead of 7\u2026Nf6) still leaves c5 alone. 5\u2026c5 itself was nothing.</p><p><b>Your side:</b> nothing to find. 8.Ne2, 8.Nf3 and 8.Rb1 are the same size; 9.Bf4 is a hair behind 9.O-O and it does not matter. 4.exd5 is the same quiet choice as in game 2 (XbhWoWMi) \u2014 the extra did not come from move 4, it came from Black's moves 6 and 7.</p><p><b>10.Bd6</b> keeps the king in the centre. That is the move that makes 13.Qd4 work: g7 and h8 hang together only because the rook is still on h8.</p>"
+      },
+      {
+        "id": "knockout",
+        "name": "2 To the last capture",
+        "type": "solve",
+        "title": "After 12\u2026Nfd7 \u00b7 White to move",
+        "prompt": "At the board you saw Qd4 and the hit on g7, and stopped at Qxg7 / Qxh8+. Write the line to the last capture, both sides. Then say what is left.",
+        "fen": "r1q1k2r/pp1n1ppp/3Bb3/1Bnp4/8/2P5/P1P1NPPP/R2Q1RK1 w kq - 2 13",
+        "solve": {
+          "line": [
+            "Qd4",
+            "Ne4",
+            "Qxg7",
+            "Nxd6",
+            "Qxh8+",
+            "Ke7",
+            "Qxc8",
+            "Rxc8"
+          ]
+        },
+        "questions": [
+          {
+            "name": "left",
+            "label": "2.1 Material after the last capture",
+            "type": "text"
+          }
+        ],
+        "key": "<p>13.Qd4 Ne4 14.Qxg7 Nxd6 15.Qxh8+ Ke7 16.Qxc8 Rxc8 \u2014 eight ply, and the count is only true at the end: you give the d6 bishop and get the h8 rook and g7. <b>An exchange and a pawn up</b> with a queenless board.</p><p>It was enough this time because every stop along the way was already winning. That is luck in the method, not in the result: in XbhWoWMi the same stop (at your own capture) cost the game. Count to \u2026Rxc8.</p><p><b>Faster?</b> No. 13.Qd4 was the only move that ends it at once \u2014 13.c4, 13.Re1 and 13.Nf4 are good but give Black a game. From here Black resigned after 20.Ng3+.</p>"
+      },
+      {
+        "id": "defence",
+        "name": "3 His best tries",
+        "title": "After 13.Qd4 \u00b7 Black to move \u00b7 play his four tries",
+        "prompt": "You stopped where the win looked safe. Now play what Black could have tried instead, to the end of each line.",
+        "fen": "r1q1k2r/pp1n1ppp/3Bb3/1Bnp4/3Q4/2P5/P1P1NPPP/R4RK1 b kq - 3 13",
+        "questions": [
+          {
+            "name": "best",
+            "label": "3.1 Which Black 13th move lasts longest?",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "choose"
+              },
+              {
+                "value": "ne4",
+                "label": "13\u2026Ne4 (game)"
+              },
+              {
+                "value": "kd8",
+                "label": "13\u2026Kd8"
+              },
+              {
+                "value": "f6",
+                "label": "13\u2026f6"
+              }
+            ]
+          }
+        ],
+        "branches": [
+          {
+            "id": "desperado",
+            "label": "Ne4 Qxg7 Qxc3 Nxc3 Nxd6 Qxh8+ Ke7 Qxa8",
+            "mustPlay": [
+              "Ne4",
+              "Qxg7",
+              "Qxc3",
+              "Nxc3",
+              "Nxd6",
+              "Qxh8+",
+              "Ke7",
+              "Qxa8"
+            ],
+            "key": "<p class='ok'>The zwischenzug for Black: 14\u2026Qxc3 grabs a pawn with tempo on a1. Take the queen \u2014 15.Nxc3 \u2014 and h8 and a8 both fall. The desperado costs Black the second rook as well.</p>"
+          },
+          {
+            "id": "mate",
+            "label": "Ne4 Qxg7 Qc6 Qxh8+ Nf8 Bxc6+ bxc6 Qxf8+ Kd7 Qe7+ Kc8 Qc7#",
+            "mustPlay": [
+              "Ne4",
+              "Qxg7",
+              "Qc6",
+              "Qxh8+",
+              "Nf8",
+              "Bxc6+",
+              "bxc6",
+              "Qxf8+",
+              "Kd7",
+              "Qe7+",
+              "Kc8",
+              "Qc7#"
+            ],
+            "key": "<p class='ok'>14\u2026Qc6 looks like a counter-attack on b5. It is mate: 15.Qxh8+ Nf8 16.Bxc6+ takes the queen with check, and the queen walks the king to c8. 14\u2026Nf6 and 14\u2026Kd8 are mate in two.</p>"
+          },
+          {
+            "id": "kd8",
+            "label": "Kd8 Qxg7 Re8 Nd4",
+            "mustPlay": [
+              "Kd8",
+              "Qxg7",
+              "Re8",
+              "Nd4"
+            ],
+            "key": "<p class='ok'>The king steps off the pin, g7 falls anyway and Nd4 joins with Nxe6 and c4 in the air. Worse than the game.</p>"
+          },
+          {
+            "id": "f6",
+            "label": "f6 Bxc5 Kf7 Bd6",
+            "mustPlay": [
+              "f6",
+              "Bxc5",
+              "Kf7",
+              "Bd6"
+            ],
+            "key": "<p class='ok'>13\u2026f6 guards g7, but the d7 knight is pinned by b5 and cannot retake: c5 is simply a piece.</p>"
+          }
+        ],
+        "key": "<p><b>13\u2026Ne4 was his best.</b> Every other move loses more or gets mated. The position after 12\u2026Nfd7 was lost, and you found the one move that shows it \u2014 the work left is counting it to the end before you play it.</p>"
+      },
+      {
+        "id": "bestdef",
+        "name": "4 If he had found Bd7",
+        "title": "After 12.Bb5+ \u00b7 Black to move \u00b7 the defence he missed",
+        "prompt": "12\u2026Nfd7 lost on the spot. Play 12\u2026Bd7 and White's best answer, then decide how much of the win was yours.",
+        "fen": "r1q1k2r/pp3ppp/3Bbn2/1Bnp4/8/2P5/P1P1NPPP/R2Q1RK1 b kq - 1 12",
+        "mustPlay": [
+          "Bd7",
+          "Bxd7+",
+          "Kxd7",
+          "Be5"
+        ],
+        "questions": [
+          {
+            "name": "lost",
+            "label": "4.1 Which Black move lost the game?",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "choose"
+              },
+              {
+                "value": "bxc3",
+                "label": "6\u2026Bxc3+"
+              },
+              {
+                "value": "be6",
+                "label": "7\u2026Be6"
+              },
+              {
+                "value": "qc8",
+                "label": "10\u2026Qc8"
+              },
+              {
+                "value": "nfd7",
+                "label": "12\u2026Nfd7"
+              }
+            ]
+          },
+          {
+            "name": "plan",
+            "label": "4.2 After 13.Bxd7+ Kxd7 14.Be5 \u2014 Black's king stays in the middle. What is your plan for the next five moves?",
+            "type": "textarea"
+          }
+        ],
+        "key": "<p><b>12\u2026Bd7!</b> 13.Bxd7+ Kxd7 14.Be5 Nce4 15.Nf4 \u2014 White is clearly better (a bit more than two pawns' worth), the king on d7 has no home, d5 is weak, but there is no knockout. Your plan: Nf4 against d5, f3 to kick the e4 knight, then Qd4.</p><p><b>What lost:</b> 10\u2026Qc8 (10\u2026Rc8 was the move) made it hard, 12\u2026Nfd7 made it over. The game lasted 20 moves because Black blocked the check with the wrong piece, not because there was a faster win for you before that.</p>"
+      },
+      {
+        "id": "log",
+        "name": "5 Log",
+        "title": "Tag the game by its lesson",
+        "prompt": "A clean game still gets a tag. Pick what it teaches, not the result.",
+        "fen": "r1q1k2r/pp1n1ppp/3Bb3/1Bnp4/8/2P5/P1P1NPPP/R2Q1RK1 w kq - 2 13",
+        "mustPlay": [],
+        "questions": [
+          {
+            "name": "stop",
+            "label": "5.1 At 13.Qd4 you stopped at Qxg7 / Qxh8+. Why was that enough here, and when would it not be?",
+            "type": "textarea"
+          },
+          {
+            "name": "tag",
+            "label": "5.2 Tag",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "choose"
+              },
+              {
+                "value": "clean",
+                "label": "clean"
+              },
+              {
+                "value": "calculation",
+                "label": "calculation"
+              },
+              {
+                "value": "conversion",
+                "label": "conversion"
+              },
+              {
+                "value": "opening",
+                "label": "opening"
+              },
+              {
+                "value": "time",
+                "label": "time"
+              }
+            ]
+          },
+          {
+            "name": "note",
+            "label": "5.3 Log note",
+            "type": "textarea"
+          }
+        ],
+        "key": "<p>Tag <b>clean</b>. From move 6 on every White move was the engine's first choice or level with it; 13.Qd4 was the only knockout and you found it. The one thing to carry over: you found the move and then stopped counting at Qxh8+. The leak doesn't cost anything in a position that is already winning, and it costs the game when the position is level \u2014 so count to the last capture anyway.</p>"
+      }
+    ]
+  },
   "JB2bQpWt": {
     "id": "JB2bQpWt",
     "url": "https://lichess.org/JB2bQpWt",
     "title": "15+10 \u00b7 you White \u00b7 Alapin",
     "date": "2026-09-12 18:31",
     "result": "1-0",
+    "category": "leak",
     "event": "Lichess 15+10 vs justlik3that",
     "startFen": "r4rk1/p3ppbp/1p4p1/qB1bP3/8/7P/PB2QPP1/1R2R1K1 w - - 2 20",
     "logNote": "Stopped at a6; missed Bd7 Bxg2 e6. Red1 is pseudo-activity vs Rfd8.",
@@ -271,6 +559,7 @@ window.PATH_SESSIONS = {
     "title": "15+10 \u00b7 you White \u00b7 French Winawer",
     "date": "2026-09-12 20:56",
     "result": "0-1",
+    "category": "leak",
     "event": "Lichess 15+10 vs marky0",
     "startFen": "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15",
     "logNote": "Saw Nxf5 gxf5 Bxf5 Bxf5 and stopped on my own capture; missed \u2026Qxf5 (ply 5). Clock 12:05 \u2192 3:26 over moves 22\u201326, then 32.Kg2?? Qg5+.",
@@ -548,6 +837,7 @@ window.PATH_SESSIONS = {
     "title": "Simul vs GM Rabiega \u00b7 you Black \u00b7 Alapin Sicilian",
     "date": "2026-09-19 19:00",
     "result": "1/2-1/2",
+    "category": "leak",
     "event": "Jubil\u00e4umssimultan 75 Jahre SC Weisse Dame \u00b7 GM Robert Rabiega (DWZ 2421) \u00b7 no clock, move when he arrives",
     "startFen": "r5k1/6pp/1ppB1p2/3p4/3P4/P2b1P2/1P4PP/4R1K1 b - - 1 25",
     "logNote": "Simul 19.09.26 vs GM Rabiega, \u00bd \u2014 offered by the GM in a lost position (about +5 at move 45). Saw 26.Re8+ Kf7 and stopped there; 27.Rc8! wins c6. Then 28\u2026Ra6 handed over the seventh (29.Rb7! was winning). Lost from 31\u2026c5 on.",
