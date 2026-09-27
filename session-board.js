@@ -2,6 +2,15 @@
   function sessions() {
     return window.PATH_SESSIONS || {};
   }
+  // Optional session `category`: what kind of game it was decides the follow-up it gets.
+  const CATEGORIES = {
+    leak: { label: "Leak", followUp: "Stopped one ply early. Name the reply you stopped at, then write the line to the last capture." },
+    clean: { label: "Clean", followUp: "Few mistakes. Check the opening, write the winning line to the last capture, play his best defence, find the move that lost." },
+    clock: { label: "Clock", followUp: "Lost to time trouble. Find where the minutes went and the move the clock chose." },
+    gift: { label: "Gift", followUp: "The result is better than the position. Work the moment it turned, not the result." },
+  };
+  function categoryOf(s) { return (s && CATEGORIES[s.category]) || null; }
+
   // Newest first by optional `date`; undated sessions keep bundle order at the end.
   function orderedIds() {
     const all = sessions();
@@ -506,6 +515,7 @@
         event: session.event || session.id,
         result: session.result || "",
         tag: (form.tag && form.tag.value) || "calculation",
+        category: session.category || "",
         note: (noteEl && noteEl.value) || session.logNote || "",
       });
     }
@@ -593,10 +603,11 @@
       const label = (s.date ? s.date + " · " : "") + (s.title || id) + (s.result ? " · " + s.result : "");
       return "<option value='" + esc(id) + "'>" + esc(label) + "</option>";
     }
-    // Optional `group` puts sessions under an optgroup; ungrouped ones are "Games".
+    // Optional `group` puts sessions under an optgroup; ungrouped ones are "Games", split by category.
     const groups = [];
     ids.forEach(function (id) {
-      const name = sessions()[id].group || "Games";
+      const c = categoryOf(sessions()[id]);
+      const name = sessions()[id].group || (c ? "Games · " + c.label : "Games");
       let g = groups.find(function (x) { return x.name === name; });
       if (!g) { g = { name: name, ids: [] }; groups.push(g); }
       g.ids.push(id);
@@ -607,6 +618,14 @@
         }).join("")
       : ids.map(option).join("");
     sel.value = sessionId || "";
+  }
+
+  function renderCategory() {
+    const el = document.getElementById("boardCategory");
+    if (!el) return;
+    const c = categoryOf(session);
+    el.classList.toggle("hidden", !c);
+    el.innerHTML = c ? "<b>" + esc(c.label) + "</b> · " + esc(c.followUp) : "";
   }
 
   function loadSession(id) {
@@ -623,6 +642,7 @@
       return !!(e && e.locked);
     });
     renderPicker();
+    renderCategory();
     if (!session) {
       document.getElementById("boardTitle").textContent = "No session loaded";
       document.getElementById("boardPrompt").textContent = "Add sessions/*.json and run python3 scripts/bundle_sessions.py";

@@ -294,6 +294,7 @@
   .board-steps button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .board-steps button.done { border-color: var(--stamp); color: var(--stamp); }
   .session-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+  .board-category { margin: -4px 0 12px; }
   .session-pick select { flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
   .aagaard-log { margin-top: 28px; padding-top: 18px; border-top: 1px solid rgba(28,23,18,.2); }
   .step-figure { margin: 0 0 12px; }
@@ -386,6 +387,7 @@
 
       <section id="panel-session" class="hidden">
         <label class="session-pick hidden" id="sessionPickWrap">Game <select id="sessionPick"></select></label>
+        <p class="muted board-category hidden" id="boardCategory"></p>
         <div class="board-steps" id="boardSteps"></div>
         <div class="board-layout">
           <div class="board-frame">
@@ -661,6 +663,7 @@
       event: entry.event,
       result: entry.result,
       tag: entry.tag,
+      category: entry.category || "",
       note: entry.note,
       ts: Date.now()
     });
@@ -794,7 +797,7 @@
       : '<li class="muted">No sessions yet.</li>';
     const games = state.games.slice().reverse();
     $("gameList").innerHTML = games.length
-      ? games.slice(0, 20).map(g => '<li><b>'+g.date+'</b> · '+g.result+' · '+g.tag+'<div class="muted">'+(g.event||"")+' — '+(g.note||"")+'</div></li>').join("")
+      ? games.slice(0, 20).map(g => '<li><b>'+g.date+'</b> · '+g.result+' · '+g.tag+(g.category && g.category !== g.tag ? ' · '+g.category : '')+'<div class="muted">'+(g.event||"")+' — '+(g.note||"")+'</div></li>').join("")
       : '<li class="muted">No slow games logged. That is the FIDE problem.</li>';
     renderAagaard();
     renderDrills();

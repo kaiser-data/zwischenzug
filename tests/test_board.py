@@ -267,3 +267,48 @@ def test_f_turns_the_board(browser_page, app_url):
 
     assert page.get_attribute("#boardFlip", "aria-pressed") == "false"
     assert page.errors == []
+
+
+CLEAN_SESSION = "6yfxgu80"
+
+
+def public_step(session_id, step_id):
+    data = json.load((ROOT / "sessions" / (session_id + ".json")).open())
+    return next(s for s in data["steps"] if s["id"] == step_id)
+
+
+def test_category_names_the_follow_up(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+
+    assert page.is_visible("#boardCategory")
+    assert page.inner_text("#boardCategory").startswith("Clean")
+    labels = page.eval_on_selector_all("#sessionPick optgroup", "gs => gs.map(g => g.label)")
+    assert "Games · Clean" in labels and "Games · Leak" in labels
+    assert page.errors == []
+
+
+def test_clean_game_needs_the_line_to_the_last_capture(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "knockout")
+    line, fen = step["solve"]["line"], step["fen"]
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#boardSteps button")
+    page.locator("#boardSteps button").nth(1).click()
+    page.wait_for_selector("#boardTake")
+    page.fill("input[name=left]", "an exchange and a pawn")
+
+    # Where he stopped at the board: Qxh8+ is ply 5 of 8.
+    play(page, fen, line[:5])
+    page.click("#boardTake")
+    page.click("#boardLock")
+    assert "stopped at ply 5" in page.inner_text("#boardErr")
+
+    page.click("#boardReset")
+    play(page, fen, line)
+    page.click("#boardTake")
+    page.click("#boardLock")
+    assert page.is_visible("#boardKey")
+    assert "Rxc8" in page.inner_text("#boardKey")
+    assert page.errors == []
