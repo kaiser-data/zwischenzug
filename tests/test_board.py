@@ -455,3 +455,64 @@ def test_a_dictated_line_solves_the_step(browser_page, app_url):
 
     assert page.is_visible("#boardKey"), page.inner_text("#boardErr")
     assert page.errors == []
+
+
+def test_undo_word_drops_the_last_move(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    assert page.evaluate("t => window.pathSpokenToSan(t)", "Springer c3 Springer d6 zurück Springer f6") == "Nc3 Nf6"
+    assert page.evaluate("t => window.pathSpokenToSan(t)", "Nc3 Nd6 back") == "Nc3"
+
+
+def test_board_follows_the_answer_box(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=line]", "Dame d4 Springer e4")
+    page.wait_for_timeout(400)
+    assert "Qd4 Ne4" in page.inner_text("#boardStatus")
+
+    page.fill("input[name=line]", "Dame d4 Springer e4 zurück")
+    page.wait_for_timeout(400)
+    status = page.inner_text("#boardStatus")
+    assert "Qd4" in status and "Ne4" not in status
+    assert page.errors == []
+
+
+def test_a_bad_move_mid_line_is_named(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=line]", "13. Qd4 Qh5 14. Qxg7")
+    page.wait_for_timeout(400)
+    assert "Qh5" in page.inner_text("#boardErr")
+    assert "Qd4" in page.inner_text("#boardStatus")
+
+
+def test_a_dictated_full_line_checks_itself(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=left]", "Qualität und Bauer")
+    page.fill("input[name=line]", "Dame d4 Springer e4 Dame schlägt g7 Springer schlägt d6 "
+                                  "Dame h8 Schach König e7 Dame c8 Turm c8")
+    page.wait_for_timeout(500)
+
+    assert page.is_visible("#boardKey"), page.inner_text("#boardErr")
+    assert page.errors == []
+
+
+def test_board_follows_a_written_branch_from_its_given_moves(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.fill("input[name=line]", "Springer schlägt c3")
+    page.wait_for_timeout(400)
+    assert "Ne4 Qxg7 Qxc3 Nxc3" in page.inner_text("#boardStatus")
+
+
+def test_reset_word_clears_the_line(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    spoken = "t => window.pathSpokenToSan(t)"
+    assert page.evaluate(spoken, "Dame d4 Springer e4 reset Dame c1") == "Qc1"
+    assert page.evaluate(spoken, "Dame d4 von vorne Turm e1") == "Re1"
+    assert page.evaluate(spoken, "Qd4 Ne4 zurücksetzen") == ""

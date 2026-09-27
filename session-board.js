@@ -397,10 +397,12 @@
     short: { kurze: 1, kurz: 1, kleine: 1, short: 1, kingside: 1 },
     long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
-    filler: { auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
+    undo: { "zurück": 1, zurueck: 1, back: 1, undo: 1, "rückgängig": 1 },
+    reset: { reset: 1, "zurücksetzen": 1, zuruecksetzen: 1, vorne: 1, vorn: 1, clear: 1, "löschen": 1 },
+    filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
   // Dictation needs no button: macOS dictation (fn twice) types into any answer box.
-  const SPEAK = "Nxc3 Qh8+ … or dictate: Springer schlägt c3, Dame h8 Schach";
+  const SPEAK = "Nxc3 Qh8+ … or dictate: Springer schlägt c3 · zurück · reset";
   const SAN_RE = /^(O-O-O|O-O|[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](x[a-h])?[1-8](=?[QRBN])?)[+#]?$/;
   const GERMAN_PIECE = { S: "N", L: "B", T: "R", D: "Q", K: "K" };
 
@@ -428,6 +430,8 @@
       else if (w in SPOKEN.short) syms.push({ k: "side", v: "O-O" });
       else if (w in SPOKEN.long) syms.push({ k: "side", v: "O-O-O" });
       else if (w in SPOKEN.castle) syms.push({ k: "castle" });
+      else if (w in SPOKEN.undo) syms.push({ k: "undo" });
+      else if (w in SPOKEN.reset) syms.push({ k: "reset" });
       else if (!(w in SPOKEN.filler)) syms.push({ k: "raw", v: raw.replace(/^\d+\.+/, "") });
     });
     // "zeh" "drei" → c3; "kurze Rochade" / "Rochade lang" → castling.
@@ -454,6 +458,9 @@
     }
     merged.forEach(function (m, i) {
       const next = merged[i + 1];
+      // Commands: "zurück" takes the last move back, "reset" / "von vorne" starts the line again.
+      if (m.k === "undo") { flush(); moves.pop(); return; }
+      if (m.k === "reset") { cur = null; moves.length = 0; return; }
       if (m.k === "san" || m.k === "raw") { flush(); moves.push(m.v); return; }
       if (m.k === "suf") {
         if (cur) cur.suf = m.v;
@@ -610,6 +617,35 @@
     return true;
   }
 
+  // The board follows what is typed or dictated into an answer box, move by move.
+  let followTimer = null;
+  function followAnswer() {
+    clearTimeout(followTimer);
+    followTimer = setTimeout(function () {
+      if (!game || !takesLine()) return;
+      const form = document.getElementById("boardForm");
+      const written = writtenLine(cur(), form);
+      const g = new Chess(cur().fen);
+      let stuck = -1;
+      for (let i = 0; i < written.length; i++) {
+        if (!looseMove(g, written[i])) { stuck = i; break; }
+      }
+      game = g;
+      future = [];
+      futureGame = game;
+      selected = null;
+      renderBoard();
+      const err = document.getElementById("boardErr");
+      // The last word may still be arriving; only a stuck move with more after it is named.
+      if (stuck !== -1 && stuck < written.length - 1) {
+        err.textContent = "The board stops before " + written[stuck] + ": not legal there, or not understood. Say \"zurück\" or correct it.";
+      } else {
+        err.textContent = "";
+        if (stuck === -1) autoCheck();
+      }
+    }, 250);
+  }
+
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
   function autoCheck() {
     if (locked[step] || !game) return;
@@ -636,6 +672,7 @@
   }
 
   function lockStep() {
+    clearTimeout(followTimer);                  // a pending follow must not wipe the grade's message
     const form = document.getElementById("boardForm");
     const s = cur();
     const err = document.getElementById("boardErr");
@@ -1230,6 +1267,10 @@
     document.getElementById("boardForm").addEventListener("submit", function (e) {
       e.preventDefault();
       if (!locked[step]) lockStep();
+    });
+    document.getElementById("boardForm").addEventListener("input", function (e) {
+      const name = e.target && e.target.name;
+      if (name === "line" || name === "scare" || name === "continue") followAnswer();
     });
     // A form with several text boxes has no implicit submit, so Enter is caught here too.
     document.getElementById("boardForm").addEventListener("keydown", function (e) {
