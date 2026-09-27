@@ -73,7 +73,8 @@ def test_miss_rewinds_board_to_the_failing_ply(browser_page, app_url):
     assert "▶ 1 more" in page.inner_text("#boardStatus")
 
 
-def test_full_line_locks_without_replaying(browser_page, app_url):
+def test_full_board_line_locks_by_itself(browser_page, app_url):
+    """No Use board line, no Lock: the board grades the line when it reaches full length."""
     step = private_step(SOLVE_SESSION)
     line, fen = step["solve"]["line"], step["fen"]
     page = browser_page
@@ -81,9 +82,6 @@ def test_full_line_locks_without_replaying(browser_page, app_url):
     page.wait_for_selector("#boardTake")
 
     play(page, fen, line)
-    page.click("#boardTake")
-    page.click("#boardStart")
-    page.click("#boardLock")
 
     assert page.is_disabled("#boardLock")
     assert "show" in (page.get_attribute("#boardKey", "class") or "")
@@ -134,8 +132,6 @@ def test_progress_survives_a_reload(browser_page, app_url):
     fen = "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15"
 
     play(page, fen, ["Qg3", "Nxf5", "gxf5", "Bxf5", "Bxf5", "Qxf5"])
-    page.click("#boardTake")
-    page.click("#boardLock")
     assert page.is_disabled("#boardLock"), "the full line locks the step"
     page.evaluate("async () => { await window.pathStore.settled(); }")
 
@@ -186,8 +182,6 @@ def test_redo_reopens_a_locked_step(browser_page, app_url):
     fen = "r4rk1/pppq1ppp/2nn2b1/3p1NB1/3P2P1/2PB1P2/P1P4P/R3QRK1 w - - 5 15"
 
     play(page, fen, ["Qg3", "Nxf5", "gxf5", "Bxf5", "Bxf5", "Qxf5"])
-    page.click("#boardTake")
-    page.click("#boardLock")
     assert page.is_visible("#boardRedo")
 
     page.click("#boardRedo")
@@ -207,15 +201,11 @@ def test_redo_does_not_write_a_second_aagaard_row(browser_page, app_url):
     page.wait_for_selector("#boardTake")
 
     play(page, fen, line)
-    page.click("#boardTake")
-    page.click("#boardLock")
     page.evaluate("async () => { await window.pathStore.settled(); }")
     assert len(page.evaluate("window.pathStore.state.aagaard")) == 1
 
     page.click("#boardRedo")
     play(page, fen, line)
-    page.click("#boardTake")
-    page.click("#boardLock")
     page.evaluate("async () => { await window.pathStore.settled(); }")
 
     assert len(page.evaluate("window.pathStore.state.aagaard")) == 1, "one row per drill"
@@ -306,9 +296,122 @@ def test_clean_game_needs_the_line_to_the_last_capture(browser_page, app_url):
     assert "stopped at ply 5" in page.inner_text("#boardErr")
 
     page.click("#boardReset")
-    play(page, fen, line)
-    page.click("#boardTake")
-    page.click("#boardLock")
+    play(page, fen, line)                       # full length: graded without Lock
     assert page.is_visible("#boardKey")
     assert "Rxc8" in page.inner_text("#boardKey")
+    assert page.errors == []
+
+
+def open_step(page, app_url, session_id, index):
+    page.goto(app_url(session=session_id, tab="session"))
+    page.wait_for_selector("#boardSteps button")
+    page.locator("#boardSteps button").nth(index).click()
+
+
+def test_written_branch_hides_its_line(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "defence")
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.wait_for_selector("input[name=line]")
+
+    first = page.locator("#branchList button").first.inner_text()
+    assert "Qxc3" in first and "Nxc3" not in first, "only the given ply"
+    assert "need" not in page.inner_text("#boardStatus")
+
+    page.fill("input[name=line]", "15. Bxd7+")
+    page.press("input[name=line]", "Enter")
+    assert "leaves the line" in page.inner_text("#boardErr")
+
+    page.fill("input[name=line]", "15. Nxc3 Nxd6 16. Qxh8+ Ke7 17. Qxa8")
+    page.press("input[name=line]", "Enter")
+    assert "Locked. Next:" in page.inner_text("#boardErr")
+    assert "✓" in page.locator("#branchList button").first.inner_text()
+    assert "15." not in page.locator("#branchList button").nth(1).inner_text(), "next line still hidden"
+    assert step["branches"][0]["mustPlay"][-1] == "Qxa8"
+    assert page.errors == []
+
+
+def test_written_branch_on_the_board_locks_itself(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "defence")
+    mate = step["branches"][1]
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.locator("#branchList button").nth(1).click()
+
+    play(page, step["fen"], mate["mustPlay"])
+
+    assert "Locked. Next:" in page.inner_text("#boardErr")
+    assert "✓" in page.locator("#branchList button").nth(1).inner_text()
+    assert page.errors == []
+
+
+def test_an_accepted_alternative_passes(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.locator("#branchList button").nth(3).click()
+
+    page.fill("input[name=line]", "14. Qxc5")
+    page.press("input[name=line]", "Enter")
+
+    assert "✓" in page.locator("#branchList button").nth(3).inner_text()
+    assert page.errors == []
+
+
+def test_played_line_locks_the_step_by_itself(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "opening")
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 0)
+    page.fill("input[name=material]", "a pawn up")
+    page.select_option("select[name=concession]", "same")
+    page.fill("textarea[name=bd6]", "castling")
+
+    play(page, step["fen"], step["mustPlay"])
+
+    assert page.is_visible("#boardKey")
+    assert page.is_disabled("#boardLock")
+    assert page.errors == []
+
+
+def test_questions_come_after_the_line(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "opening")
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 0)
+
+    play(page, step["fen"], step["mustPlay"])
+    assert "Answer the questions" in page.inner_text("#boardErr")
+    assert not page.is_disabled("#boardLock")
+
+    page.fill("input[name=material]", "a pawn up")
+    page.select_option("select[name=concession]", "same")
+    page.fill("textarea[name=bd6]", "castling")
+    page.press("input[name=material]", "Enter")
+    assert page.is_disabled("#boardLock")
+    assert page.errors == []
+
+
+def test_typed_solve_line_needs_no_replay(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=left]", "an exchange and a pawn")
+    page.fill("input[name=line]", "13. Qd4 Ne4 14. Qxg7 Nxd6 15. Qxh8+ Ke7 16. Qxc8 Rxc8")
+
+    page.press("input[name=line]", "Enter")
+
+    assert page.is_visible("#boardKey")
+    assert "Rxc8" in page.inner_text("#boardStatus")
+    assert page.errors == []
+
+
+def test_locked_branches_survive_a_reload(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.fill("input[name=line]", "15. Nxc3 Nxd6 16. Qxh8+ Ke7 17. Qxa8")
+    page.press("input[name=line]", "Enter")
+    page.evaluate("async () => { await window.pathStore.settled(); }")
+
+    page.reload()
+    page.wait_for_selector("#branchList button")
+
+    assert "✓" in page.locator("#branchList button").first.inner_text()
+    assert "on" in (page.locator("#branchList button").nth(1).get_attribute("class") or "")
     assert page.errors == []

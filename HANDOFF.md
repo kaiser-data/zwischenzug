@@ -61,7 +61,9 @@ One file app: `index.html` + `session-board.js` + `pieces.js` (CBurnett) + `ches
   - default: questions + `mustPlay` on the board, optional `branches[]` (the step's key opens only when every branch is locked; after a lock the board opens the next unplayed branch and names it).
   - `stopPly`: name the reply that stopped you, write the moves after it. Grades "that is ply 1", "you stopped at ply N", mix-up (plays a contrast board + key), illegal / off-line ply. Then the line must be played on the board.
   - `solve`: write the whole line from move one; graded ply by ply against `solve.line` (wrong candidate / stopped at ply N / leaves the line / illegal or ambiguous SAN). First miss auto-logs to the Aagaard log via `logAs`.
-- **Use board line** (under the answer box of a `stopPly` / `solve` step): writes the line on the board — moves played plus moves stepped back over — into the answer box as numbered SAN, so nothing is typed twice. The grader is unchanged; a `Show`n or saved line can go in the same way with **Use as answer**. On a miss in a board-entered line the board rewinds to the ply that went wrong and the rest stays ahead (▶), so the position and the message agree. On a pass, Lock replays the line instead of asking for it again. Enter in an answer box locks (the form no longer reloads the page).
+- **Use board line** (under the answer box of a `stopPly` / `solve` step): writes the line on the board — moves played plus moves stepped back over — into the answer box as numbered SAN, so nothing is typed twice. The grader is unchanged; a `Show`n or saved line can go in the same way with **Use as answer**. On a miss in a board-entered line the board rewinds to the ply that went wrong and the rest stays ahead (▶), so the position and the message agree. On a pass the line goes on the board by itself — never replayed by hand. Enter in any answer box locks (caught on keydown, since a form with several text boxes has no implicit submit).
+- **Auto-check (2026-09-27):** the board grades by itself. A written line (`solve`, `stopPly`, written branch) is graded the moment the board line reaches full length (or matches an accepted line exactly); a played step (`mustPlay`, shown branch) locks when the last move is on the board. **Lock** stays for "I stop here" — stopping early is the leak, so it must be his explicit act — and for question-only steps. Order inside Lock: line → board → branch → questions last ("Line done. Answer the questions, then press Enter or Lock.").
+- **Written branches** (`write: true`): the branch button shows only the first `given` ply plus an optional `ask`; he writes the rest (type + Enter, or play it — graded at full length). Status bar shows no "need" for them. Locked branches are saved at once and survive reloads; a session resumes on the first open branch.
 - The solution line stays hidden from the status bar until the written line passes.
 - Optional book diagram next to the board (`image`, `caption`, `links[]`), collapsible; open/closed is remembered (`localStorage` `zwischenzug_figure_open`).
 - Navigation ⏮ ◀ ▶ ⏭ and keys ← → (step), ↑ start, ↓ end. Back keeps the moves, forward replays; playing the remembered move keeps the rest, any other move drops it. Keys are ignored while typing.
@@ -90,19 +92,19 @@ Fixed along the way: board-logged games were overwritten by the next `save(state
 Source of truth: `sessions/<lichessId>.json` (public) or `sessions/private/<id>.json` (book material). After every edit:
 
 ```bash
-python3 scripts/bundle_sessions.py   # writes sessions/bundle.js and sessions/private/bundle.js; fails on id clash
+python3 scripts/bundle_sessions.py   # validates, then writes sessions/bundle.js and sessions/private/bundle.js; fails on id clash or any illegal line
 ```
 
 Session: `id`, `url`, `title`, `date` ("YYYY-MM-DD HH:MM"), `result`, `event`, `startFen`, `logNote`, optional `category` (`leak` | `clean` | `clock` | `gift`, games only — see §5A 3b; labels and follow-up lines live in `CATEGORIES` in `session-board.js`), optional `group`, optional `logAs: {kind: "aagaard", chapter, exercise}`, `steps[]`. A board-logged game carries the category into the Log.
 
 Step: `id`, `name`, `title`, `prompt`, `fen` (full FEN with the real move number), `questions[]`, `key` (HTML shown after Lock), optional `type` (`stopPly` | `solve`), `mustPlay[]`, `branches[]`, `image`, `caption`, `links[] {label, href}`.
 
-- Branch: `id`, `label`, `mustPlay[]`, `key`.
+- Branch: `id`, `label`, `mustPlay[]`, `key`, optional `write` (bool), `given` (plies shown, default 1), `ask` (short hint after the given moves), `alts[][]` (other accepted full lines; must share the given plies). Use `write` for any line that is his to calculate; keep shown branches for replays. Only lines with one clear continuation belong in `write` — add `alts` where two moves are equally good.
 - Question: `name`, `label`, `type` = `text` | `textarea` | `select` | `triple`, optional `hint`, `names`, `options`.
 - `stopPly`: `candidate`, `scare` (ply 1), `continue[]`, optional `mixups[] {match[], line[], key}` — `match` is compared with the moves written after the scare; `line` is played from the step `fen`. Add a mix-up only when the engine shows a real difference.
-- `solve`: `line[]` (both sides, from the step `fen`).
+- `solve`: `line[]` (both sides, from the step `fen`), optional `alts[][]` (other accepted lines).
 
-Keys are teaching sentences, never "cp=-17". `session-board.js` stays generic: a new game is new JSON + bundle, zero board JS edits unless a new step *type* is needed. Verify every `mustPlay` / `continue` / `mixups.line` / `solve.line` with python-chess before shipping (illegal SAN means Lock never opens).
+Keys are teaching sentences, never "cp=-17". `session-board.js` stays generic: a new game is new JSON + bundle, zero board JS edits unless a new step *type* is needed. `bundle_sessions.py` now checks every `mustPlay` / `stopPly` / `mixups.line` / `solve.line` / `alts` / branch with python-chess, plus FENs, `category`, `given`, duplicate ids — and refuses to bundle (illegal SAN means Lock never opens). `mixups.match` is compared as text and may be illegal on purpose. `tests/test_sessions.py` runs the same check.
 
 ---
 

@@ -37,6 +37,8 @@
   let ready = false;
   let stopPassed = false;
   let firstMiss = null;
+  // The line a written answer passed with (the main line or an accepted alternative).
+  let passedLine = null;
   let stepStarted = 0;
   // Saved progress for the open session: { at, logged, steps: { [stepId]: entry } }.
   let progress = { at: "", logged: false, steps: {} };
@@ -136,6 +138,7 @@
       if (move) keepFuture(move);
       if (!move && piece && piece.color === game.turn()) selected = sq;
       renderBoard();
+      if (move) autoCheck();
       return;
     }
     if (piece && piece.color === game.turn()) {
@@ -171,11 +174,36 @@
     return "<label>" + esc(q.label) + hint + "<input name='" + esc(q.name) + "' type='text' required></label>";
   }
 
+  // A written branch shows only its first `given` ply; the rest is his to write.
+  function givenOf(b) { return b.given == null ? 1 : b.given; }
+  function branchLabel(b) {
+    if (!b.write) return b.label;
+    return numbered(cur().fen, (b.mustPlay || []).slice(0, givenOf(b))) + " …" + (b.ask ? " " + b.ask : "");
+  }
+  function writeBranch() {
+    const b = (cur().branches || [])[activeBranch];
+    return b && b.write && !branchLocked[activeBranch] && !locked[step] ? b : null;
+  }
+
+  function renderBranchWrite() {
+    const host = document.getElementById("branchWrite");
+    if (!host) return;
+    const b = writeBranch();
+    if (!b) { host.innerHTML = ""; return; }
+    const n = (b.mustPlay || []).length;
+    host.innerHTML = "<label>Your line after " + esc(numbered(cur().fen, b.mustPlay.slice(0, givenOf(b)))) +
+      "<span>Both sides, to the last capture or check. On the board it is checked at " + n + " ply; stopping earlier, press Lock.</span>" +
+      "<input name='line' type='text' autocomplete='off'></label>" + takeButton();
+    const take = document.getElementById("boardTake");
+    if (take) take.addEventListener("click", function () { fillAnswer(boardLine()); });
+  }
+
   function renderBranches() {
     const list = cur().branches;
     const host = document.getElementById("branchList");
     if (!host) return;
     if (!list || !list.length) {
+      renderBranchWrite();
       host.innerHTML = "";
       host.classList.add("hidden");
       return;
@@ -184,8 +212,9 @@
     host.innerHTML = list.map(function (b, i) {
       const cls = i === activeBranch ? "on" : (branchLocked[i] ? "done" : "");
       const mark = branchLocked[i] ? " ✓" : "";
-      return "<button type='button' class='branch " + cls + "' data-i='" + i + "'>" + esc(b.label) + mark + "</button>";
+      return "<button type='button' class='branch " + cls + "' data-i='" + i + "'>" + esc(branchLabel(b)) + mark + "</button>";
     }).join("");
+    renderBranchWrite();
     host.querySelectorAll("button").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (locked[step]) return;
@@ -235,7 +264,8 @@
     document.getElementById("boardPrompt").textContent = cur().prompt || "";
     const qs = cur().questions || [];
     const lead = cur().type === "stopPly" ? renderStopPly(cur().stopPly || {})
-      : cur().type === "solve" ? renderSolve(cur().solve || {}) : "";
+      : cur().type === "solve" ? renderSolve(cur().solve || {})
+      : (cur().branches || []).some(function (b) { return b.write; }) ? "<div id='branchWrite'></div>" : "";
     const figure = document.getElementById("boardFigure");
     if (figure) {
       figure.innerHTML = renderFigure(cur());
@@ -297,33 +327,58 @@
   // Solve: write the whole line from the first move; graded ply by ply against solve.line.
   function renderSolve(sp) {
     const n = (sp.line || []).length;
-    return "<label>Your line, from the first move<span>The book's line is " + n + " ply. Calculate all of it first, then type it or play it on the board and press Use board line.</span>" +
+    return "<label>Your line, from the first move<span>The " + (session && session.logAs ? "book's " : "") + "line is " + n + " ply. Calculate all of it first, then type it (Enter) or play it on the board — the board checks it at " + n + " ply. Stopping earlier? Press Lock.</span>" +
       "<input name='line' type='text' required></label>" + takeButton();
   }
 
-  function gradeSolve(s, form) {
-    const line = (s.solve && s.solve.line) || [];
-    const have = tokens(form.elements.line && form.elements.line.value);
+  // Grade a written line ply by ply against the main line and any accepted alternatives.
+  // Plies past the end of a finished line are ignored.
+  function gradeLines(fen, lines, have, noun) {
     if (!have.length) return { ok: false, msg: "Write the first move." };
-    const g = new Chess(s.fen);
-    for (let i = 0; i < line.length; i++) {
+    const g = new Chess(fen);
+    let live = lines;
+    for (let i = 0; ; i++) {
       const ply = i + 1;
+      const done = live.find(function (l) { return l.length === i; });
+      const longer = live.filter(function (l) { return l.length > i; });
+      if (done && (!longer.length || i >= have.length)) return { ok: true, line: done };
       if (i >= have.length) {
+        const n = Math.min.apply(null, longer.map(function (l) { return l.length; }));
         return { ok: false, at: i, miss: { result: "short", ply: i },
-          msg: "You stopped at ply " + i + ". The book's line is " + line.length + " ply. What happens next?" };
+          msg: "You stopped at ply " + i + ". " + noun + " is " + n + " ply. What happens next?" };
       }
       const mv = g.move(have[i], { sloppy: true });
       if (!mv) return { ok: false, at: i, msg: "Ply " + ply + ": " + have[i] + " is not legal there, or it is ambiguous (write Rexe5, R8xf6). Set it up on the board and look again." };
-      if (norm(mv.san) !== norm(line[i])) {
+      const next = longer.filter(function (l) { return norm(l[i]) === norm(mv.san); });
+      if (!next.length) {
+        if (done) return { ok: true, line: done };
         if (i === 0) {
           return { ok: false, at: 0, miss: { result: "wrong" },
-            msg: "Not the book's first move. Before the obvious move, look for one in between: a check, a capture, a threat." };
+            msg: "Not the first move. Before the obvious move, look for one in between: a check, a capture, a threat." };
         }
         return { ok: false, at: i, miss: { result: "short", ply: i },
-          msg: "Ply " + ply + ": " + have[i] + " leaves the book's line. " + (i % 2 ? "Which reply is the most testing?" : "Look again from there.") };
+          msg: "Ply " + ply + ": " + have[i] + " leaves the line. " + (i % 2 ? "Which reply is the most testing?" : "Look again from there.") };
       }
+      live = next;
     }
-    return { ok: true };
+  }
+
+  function gradeSolve(s, form) {
+    const sp = s.solve || {};
+    const lines = [sp.line || []].concat(sp.alts || []);
+    return gradeLines(s.fen, lines, tokens(form.elements.line && form.elements.line.value),
+      session && session.logAs ? "The book's line" : "The line");
+  }
+
+  function gradeBranch(b, form) {
+    return gradeLines(cur().fen, [b.mustPlay || []].concat(b.alts || []), branchWritten(b, form), "The line");
+  }
+
+  // What he wrote for a branch, with the given plies in front whether he typed them or not.
+  function branchWritten(b, form) {
+    const given = (b.mustPlay || []).slice(0, givenOf(b)).map(norm);
+    const have = tokens(form.elements.line && form.elements.line.value);
+    return startsWith(have, given) ? have : given.concat(have);
   }
 
   function tokens(text) {
@@ -391,8 +446,12 @@
       // Hidden until the written line passes, so the status bar cannot give it away.
       return stopPassed ? [sp.candidate, sp.scare].concat(sp.continue || []) : [];
     }
-    if (s.type === "solve") return stopPassed ? ((s.solve && s.solve.line) || []) : [];
-    if (s.branches && s.branches.length) return s.branches[activeBranch].mustPlay || [];
+    if (s.type === "solve") return stopPassed ? (passedLine || (s.solve && s.solve.line) || []) : [];
+    if (s.branches && s.branches.length) {
+      const b = s.branches[activeBranch];
+      // A written branch keeps its line hidden until it is locked.
+      return b.write && !branchLocked[activeBranch] ? [] : (b.mustPlay || []);
+    }
     return s.mustPlay || [];
   }
 
@@ -403,19 +462,67 @@
     return need.every(function (m, i) { return h[i] === norm(m); });
   }
 
+  // Lock the active branch and keep it across reloads; true while other branches are still open.
+  function lockBranch() {
+    const s = cur();
+    branchLocked[activeBranch] = true;
+    entryFor(stepId(step)).branches = s.branches
+      .filter(function (b, i) { return branchLocked[i]; })
+      .map(function (b) { return b.id; });
+    saveProgress();
+    const key = document.getElementById("boardKey");
+    key.innerHTML = s.branches[activeBranch].key || "";
+    key.classList.add("show");
+    const nextOpen = branchLocked.indexOf(false);
+    if (nextOpen === -1) {
+      renderBranches();
+      return false;
+    }
+    // Jump to the next unplayed line; the key of the one just locked stays visible.
+    activeBranch = nextOpen;
+    game = new Chess(s.fen);
+    selected = null;
+    renderBranches();
+    renderBoard();
+    const left = branchLocked.filter(function (x) { return !x; }).length;
+    document.getElementById("boardErr").textContent =
+      "Locked. Next: " + branchLabel(s.branches[nextOpen]) + " (" + left + " left)";
+    return true;
+  }
+
+  // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
+  function autoCheck() {
+    if (locked[step] || !game) return;
+    const s = cur();
+    const played = game.history();
+    if (takesLine()) {
+      let lines;
+      if (s.type === "stopPly") {
+        const sp = s.stopPly || {};
+        lines = [[sp.candidate, sp.scare].concat(sp.continue || [])];
+      } else if (s.type === "solve") {
+        lines = [(s.solve || {}).line || []].concat((s.solve || {}).alts || []);
+      } else {
+        const b = writeBranch();
+        lines = [b.mustPlay || []].concat(b.alts || []);
+      }
+      const exact = lines.some(function (l) { return sameLine(l, played); });
+      const longest = Math.max.apply(null, lines.map(function (l) { return l.length; }));
+      if ((exact || played.length >= longest) && fillAnswer(played)) lockStep();
+      return;
+    }
+    const need = mustPlayNow();
+    if (need.length && historyMatches(need)) lockStep();
+  }
+
   function lockStep() {
     const form = document.getElementById("boardForm");
     const s = cur();
-    const missing = Array.from(form.querySelectorAll("[required]")).filter(function (el) {
-      return !String(el.value || "").trim();
-    });
-    if (missing.length) {
-      document.getElementById("boardErr").textContent = "Fill every field.";
-      missing[0].focus();
-      return;
-    }
-    if ((s.type === "stopPly" || s.type === "solve") && !stopPassed) {
-      const graded = s.type === "solve" ? gradeSolve(s, form) : gradeStopPly(s, form);
+    const err = document.getElementById("boardErr");
+    const wb = writeBranch();
+    const written = ((s.type === "stopPly" || s.type === "solve") && !stopPassed) || !!wb;
+    if (written) {
+      const graded = wb ? gradeBranch(wb, form) : s.type === "solve" ? gradeSolve(s, form) : gradeStopPly(s, form);
       if (!graded.ok) {
         if (graded.miss && !firstMiss) firstMiss = graded.miss;
         const onBoard = boardLine();
@@ -432,49 +539,37 @@
           document.getElementById("boardKey").classList.remove("show");
           document.getElementById("boardKey").innerHTML = "";
         }
-        document.getElementById("boardErr").textContent = graded.msg;
+        err.textContent = graded.msg;
         return;
       }
-      stopPassed = true;
-      document.getElementById("boardKey").classList.remove("show");
-      document.getElementById("boardKey").innerHTML = "";
-      renderVariations();
-      // A line entered from the board is already played; only replay to its end.
-      if (!historyMatches(mustPlayNow()) && startsWith(boardLine().map(norm), mustPlayNow())) {
-        while (stepForward()) { /* replay */ }
+      let line = graded.line;
+      if (!wb) {
+        stopPassed = true;
+        passedLine = graded.line || null;
+        line = mustPlayNow();
+        document.getElementById("boardKey").classList.remove("show");
+        document.getElementById("boardKey").innerHTML = "";
+        renderVariations();
       }
-      if (!historyMatches(mustPlayNow())) {
-        game = new Chess(s.fen);
-        selected = null;
-        renderBoard();
-        document.getElementById("boardErr").textContent = "Right. Now play it on the board: " + mustPlayNow().join(" ");
-        return;
-      }
+      // Nothing to replay by hand: the line that passed goes on the board.
+      if (!historyMatches(line)) rewindTo(line, line.length);
     }
     const need = mustPlayNow();
     if (!historyMatches(need)) {
-      document.getElementById("boardErr").textContent = "On the board play: " + need.join(" ");
+      err.textContent = "On the board play: " + need.join(" ");
       return;
     }
-    if (s.branches && s.branches.length) {
-      branchLocked[activeBranch] = true;
-      const bkey = s.branches[activeBranch].key || "";
-      document.getElementById("boardKey").innerHTML = bkey;
-      document.getElementById("boardKey").classList.add("show");
-      const nextOpen = branchLocked.indexOf(false);
-      if (nextOpen !== -1) {
-        // Jump to the next unplayed line; the key of the one just locked stays visible.
-        activeBranch = nextOpen;
-        game = new Chess(s.fen);
-        selected = null;
-        renderBranches();
-        renderBoard();
-        const left = branchLocked.filter(function (x) { return !x; }).length;
-        document.getElementById("boardErr").textContent =
-          "Locked. Now play: " + s.branches[nextOpen].label + " (" + left + " left)";
-        return;
-      }
-      renderBranches();
+    if (s.branches && s.branches.length && !branchLocked[activeBranch] && lockBranch()) return;
+    // The questions come last, so a finished line is never held up by an empty box.
+    const missing = Array.from(form.querySelectorAll("[required]")).filter(function (el) {
+      return !String(el.value || "").trim();
+    });
+    if (missing.length) {
+      err.textContent = written || need.length || (s.branches || []).length
+        ? "Line done. Answer the questions, then press Enter or Lock."
+        : "Fill every field.";
+      missing[0].focus();
+      return;
     }
     locked[step] = true;
     captureAnswers();
@@ -485,7 +580,7 @@
       .map(function (b) { return b.id; });
     saveProgress();
     const key = document.getElementById("boardKey");
-    key.innerHTML = (s.branches && s.branches.length ? key.innerHTML : "") + (s.key || "");
+    key.innerHTML = (s.branches || []).map(function (b) { return b.key || ""; }).join("") + (s.key || "");
     key.classList.add("show");
     document.getElementById("boardLock").disabled = true;
     document.getElementById("boardRedo").classList.remove("hidden");
@@ -571,12 +666,15 @@
     step = n;
     activeBranch = 0;
     firstMiss = null;
+    passedLine = null;
     stepStarted = Date.now();
     const entry = entryFor(stepId(n));
     stopPassed = !!entry.passed;
     branchLocked = (cur().branches || []).map(function (b) {
       return entry.branches.indexOf(b.id) !== -1;
     });
+    // Resume on the first line still open.
+    activeBranch = Math.max(0, branchLocked.indexOf(false));
     locked[n] = !!entry.locked;
     game = new Chess(cur().fen);
     selected = null;
@@ -713,11 +811,14 @@
 
   function takesLine() {
     const t = cur().type;
+    if (writeBranch()) return true;
     return (t === "solve" || t === "stopPly") && !stopPassed && !locked[step];
   }
 
   // What the answer boxes say, as plies from the step position.
   function writtenLine(s, form) {
+    const wb = writeBranch();
+    if (wb) return branchWritten(wb, form);
     if (s.type === "solve") return tokens(form.elements.line && form.elements.line.value);
     const sp = s.stopPly || {};
     return [norm(sp.candidate)].concat(tokens(form.elements.scare && form.elements.scare.value),
@@ -739,7 +840,16 @@
       return false;
     }
     let box;
-    if (s.type === "solve") {
+    const wb = writeBranch();
+    if (wb) {
+      const given = (wb.mustPlay || []).slice(0, givenOf(wb));
+      if (!startsWith(moves.map(norm), given)) {
+        err.textContent = "Start the board line with " + given.join(" ") + ".";
+        return false;
+      }
+      box = form.elements.line;
+      box.value = numbered(s.fen, moves.slice(given.length), given.length);
+    } else if (s.type === "solve") {
       box = form.elements.line;
       box.value = numbered(s.fen, moves);
     } else {
@@ -998,6 +1108,12 @@
     document.getElementById("boardFlip").addEventListener("click", flipBoard);
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.
     document.getElementById("boardForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (!locked[step]) lockStep();
+    });
+    // A form with several text boxes has no implicit submit, so Enter is caught here too.
+    document.getElementById("boardForm").addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || e.isComposing || !e.target || e.target.tagName !== "INPUT") return;
       e.preventDefault();
       if (!locked[step]) lockStep();
     });

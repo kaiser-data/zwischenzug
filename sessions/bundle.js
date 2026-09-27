@@ -96,8 +96,8 @@ window.PATH_SESSIONS = {
       {
         "id": "defence",
         "name": "3 His best tries",
-        "title": "After 13.Qd4 \u00b7 Black to move \u00b7 play his four tries",
-        "prompt": "You stopped where the win looked safe. Now play what Black could have tried instead, to the end of each line.",
+        "title": "After 13.Qd4 \u00b7 Black to move \u00b7 his four tries",
+        "prompt": "Three of his tries show only his moves \u2014 write your answer to the end, both sides, before you touch the board. The fourth you play through.",
         "fen": "r1q1k2r/pp1n1ppp/3Bb3/1Bnp4/3Q4/2P5/P1P1NPPP/R4RK1 b kq - 3 13",
         "questions": [
           {
@@ -138,7 +138,10 @@ window.PATH_SESSIONS = {
               "Ke7",
               "Qxa8"
             ],
-            "key": "<p class='ok'>The zwischenzug for Black: 14\u2026Qxc3 grabs a pawn with tempo on a1. Take the queen \u2014 15.Nxc3 \u2014 and h8 and a8 both fall. The desperado costs Black the second rook as well.</p>"
+            "key": "<p class='ok'>The zwischenzug for Black: 14\u2026Qxc3 grabs a pawn with tempo on a1. Take the queen \u2014 15.Nxc3 \u2014 and h8 and a8 both fall. The desperado costs Black the second rook as well.</p>",
+            "write": true,
+            "given": 3,
+            "ask": "his in-between capture"
           },
           {
             "id": "mate",
@@ -157,7 +160,10 @@ window.PATH_SESSIONS = {
               "Kc8",
               "Qc7#"
             ],
-            "key": "<p class='ok'>14\u2026Qc6 looks like a counter-attack on b5. It is mate: 15.Qxh8+ Nf8 16.Bxc6+ takes the queen with check, and the queen walks the king to c8. 14\u2026Nf6 and 14\u2026Kd8 are mate in two.</p>"
+            "key": "<p class='ok'>14\u2026Qc6 looks like a counter-attack on b5. It is mate: 15.Qxh8+ Nf8 16.Bxc6+ takes the queen with check, and the queen walks the king to c8. 14\u2026Nf6 and 14\u2026Kd8 are mate in two.</p>",
+            "write": true,
+            "given": 3,
+            "ask": "looks like counterplay"
           },
           {
             "id": "kd8",
@@ -172,14 +178,21 @@ window.PATH_SESSIONS = {
           },
           {
             "id": "f6",
-            "label": "f6 Bxc5 Kf7 Bd6",
+            "label": "f6 Bxc5",
             "mustPlay": [
               "f6",
-              "Bxc5",
-              "Kf7",
-              "Bd6"
+              "Bxc5"
             ],
-            "key": "<p class='ok'>13\u2026f6 guards g7, but the d7 knight is pinned by b5 and cannot retake: c5 is simply a piece.</p>"
+            "key": "<p class='ok'>13\u2026f6 guards g7, but the d7 knight is pinned by b5 and cannot retake: 14.Bxc5 (or 14.Qxc5 Qxc5 15.Bxc5) is simply a piece.</p>",
+            "write": true,
+            "given": 1,
+            "ask": "guards g7",
+            "alts": [
+              [
+                "f6",
+                "Qxc5"
+              ]
+            ]
           }
         ],
         "key": "<p><b>13\u2026Ne4 was his best.</b> Every other move loses more or gets mated. The position after 12\u2026Nfd7 was lost, and you found the one move that shows it \u2014 the work left is counting it to the end before you play it.</p>"
