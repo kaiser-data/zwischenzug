@@ -302,6 +302,11 @@
   .btn.mic[aria-disabled="true"] { opacity: .45; }
   .btn.mic.on { outline: 2px solid currentColor; outline-offset: 1px; }
   .voice-heard { margin: 6px 0 0; min-height: 1.2em; }
+  .voice-drill { margin: 10px 0 0; }
+  .voice-drill summary { cursor: pointer; }
+  .drill-say { font-size: 2rem; margin: 8px 0; min-height: 1.2em; }
+  .drill-keep { display: flex; gap: 8px; align-items: center; font-weight: normal; }
+  .drill-keep input { width: auto; }
   .btn:disabled, .btn.disabled { opacity: .45; cursor: default; }
   a.btn { display: inline-block; text-decoration: none; }
   .variations { margin-top: 18px; }
@@ -409,6 +414,16 @@
               <a class="btn ghost disabled" id="boardLichess" href="https://lichess.org/analysis" target="_blank" rel="noopener" aria-disabled="true">Lichess analysis</a>
             </div>
             <p class="muted voice-heard" id="voiceHeard" aria-live="polite"></p>
+            <details class="voice-drill" id="voiceDrill">
+              <summary>Train the voice model</summary>
+              <p class="muted">Say the move shown, with 🎤 or 🎧. Each recording is saved on this Mac (~/.cache/zwischenzug/voice/samples) with the move as its label — nothing is uploaded. The score is how well the model hears <i>your</i> voice today.</p>
+              <div class="row"><button class="btn ghost" type="button" id="drillStart">Start voice drill</button>
+                <span class="muted" id="drillCount"></span></div>
+              <p class="drill-say serif" id="drillSay" aria-live="polite"></p>
+              <label class="drill-keep"><input type="checkbox" id="drillKeep"> Also keep moves I speak on the board (and my corrections after “back”)</label>
+              <p class="muted" id="drillStats"></p>
+              <div id="drillPanel" class="hidden"></div>
+            </details>
             <div class="variations">
               <h3 class="serif">Variations</h3>
               <div class="var-save">

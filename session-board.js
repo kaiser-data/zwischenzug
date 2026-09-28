@@ -400,6 +400,7 @@
     undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
     done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
+    skip: { skip: 1, weiter: 1, next: 1 },
     reset: { reset: 1, "zurücksetzen": 1, zuruecksetzen: 1, vorne: 1, vorn: 1, clear: 1, "löschen": 1 },
     filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
@@ -713,11 +714,7 @@
     const rec = voice.rec;
     voice.rec = null;
     if (Date.now() - voice.started < 300) { heard("Hold 🎤 while you speak."); return; }
-    const blob = new Blob(voice.chunks, { type: rec.mimeType });
-    heard("…");
-    fetch(VOICE_URL + "/transcribe?lang=" + voiceLang(), { method: "POST", body: blob, headers: { "Content-Type": rec.mimeType } })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { voiceApply(j.text || ""); }, function () { setVoiceReady(false); heard("Voice server stopped."); });
+    utterance(new Blob(voice.chunks, { type: rec.mimeType }));
   }
 
   // Active listening: cut the microphone stream into utterances by loudness, no button needed.
@@ -771,9 +768,155 @@
 
   const listen = { on: false, ctx: null, stream: null, node: null, queue: Promise.resolve() };
 
-  function transcribeBlob(blob) {
-    return fetch(VOICE_URL + "/transcribe?lang=" + voiceLang(), { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
+  function transcribeBlob(blob, moves) {
+    const q = "?lang=" + voiceLang() + (moves ? "&moves=" + encodeURIComponent(moves.join(",")) : "");
+    return fetch(VOICE_URL + "/transcribe" + q, { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
       .then(function (r) { return r.json(); });
+  }
+
+  // Where the next spoken move will be played: the end of the written line, or the board.
+  function positionNow() {
+    if (!takesLine()) return new Chess(game.fen());
+    const g = new Chess(cur().fen);
+    writtenLine(cur(), document.getElementById("boardForm")).every(function (m) { return !!looseMove(g, m); });
+    return g;
+  }
+
+  function legalIn(g, san) {
+    const moves = san.split(" ").filter(Boolean);
+    return moves.length > 0 && moves.every(function (m) { return !!looseMove(g, m); });
+  }
+
+  function commandOf(text) {
+    const words = String(text).toLowerCase().replace(/[.,!?]/g, " ").trim().split(/\s+/);
+    const only = function (set) { return words.length <= 2 && words.some(function (w) { return w in set; }); };
+    return only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : only(SPOKEN.done) ? "done"
+      : only(SPOKEN.stop) ? "stop" : only(SPOKEN.skip) ? "skip" : null;
+  }
+
+  const CHESSY = /[a-h]\s*\.?\s*[1-8]|\b[a-h]\b|knight|bishop|rook|queen|king|castle|springer|läufer|turm|dame|könig|rochade/i;
+
+  // Free first; a move-like answer that is not legal here gets one more pass, held to the legal
+  // moves by a grammar. Silence and noise never get that pass, so no move is forced out of them.
+  function recognise(blob, g) {
+    return transcribeBlob(blob).then(function (j) {
+      const text = j.text || "";
+      if (commandOf(text) || !CHESSY.test(text) || legalIn(new Chess(g.fen()), spokenToSan(text))) return { text: text, heard: text };
+      return transcribeBlob(blob, g.moves()).then(function (j2) {
+        const again = j2.text || "";
+        return legalIn(new Chess(g.fen()), spokenToSan(again)) ? { text: again, heard: text } : { text: text, heard: text };
+      }, function () { return { text: text, heard: text }; });
+    });
+  }
+
+  // Samples for training: a spoken move he did not take back, or — after "back" — the move he
+  // said instead, paired with the recording that was misheard. Only when he opted in.
+  const SAMPLE_KEY = "zwischenzug_voice_keep";
+  const samples = { pending: null, misheard: null, timer: null };
+  function keepSamples() { try { return localStorage.getItem(SAMPLE_KEY) === "1"; } catch (e) { return false; } }
+  function saveSample(blob, label, heardText, source) {
+    const q = "?lang=" + voiceLang() + "&label=" + encodeURIComponent(label) + "&heard=" + encodeURIComponent(heardText || "") + "&source=" + source;
+    return fetch(VOICE_URL + "/sample" + q, { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
+      .then(function (r) { return r.json(); }).then(function (j) { renderSampleStats(j.stats); return j; }, function () { return null; });
+  }
+  function flushPending() {
+    clearTimeout(samples.timer);
+    if (samples.pending) saveSample(samples.pending.blob, samples.pending.san, samples.pending.heard, "spoken");
+    samples.pending = null;
+  }
+  function noteSample(blob, result, applied) {
+    if (!keepSamples() || drill.on) return;
+    const cmd = commandOf(result.text);
+    if (cmd === "undo") {
+      clearTimeout(samples.timer);
+      if (samples.pending) samples.misheard = samples.pending;
+      samples.pending = null;
+      return;
+    }
+    if (!applied || applied.split(" ").length !== 1) return;
+    if (samples.misheard) {
+      saveSample(samples.misheard.blob, applied, samples.misheard.heard, "correction");
+      samples.misheard = null;
+    }
+    flushPending();
+    samples.pending = { blob: blob, san: applied, heard: result.heard };
+    samples.timer = setTimeout(flushPending, 5000);
+  }
+
+  // Every recording, from 🎤 or 🎧, goes through here, one at a time and in order,
+  // so "back" never overtakes the move it takes back.
+  function utterance(blob) {
+    heard("…");
+    listen.queue = listen.queue.then(function () {
+      if (drill.on) return drillHear(blob);
+      return recognise(blob, positionNow()).then(function (result) {
+        const applied = voiceApply(result.text).san;
+        noteSample(blob, result, applied);
+      });
+    }).catch(function () { setVoiceReady(false); heard("Voice server stopped."); listenStop(); });
+  }
+
+  // Voice drill: say the move shown; every recording is kept with that move as its label.
+  // The score is the model as it is, on his voice — the number that decides whether to retrain.
+  const drill = { on: false, target: null, fen: "", n: 0, of: 20, right: 0 };
+  function drillPositions() {
+    const out = [];
+    steps().forEach(function (s) {
+      const lines = [s.mustPlay || []].concat((s.branches || []).map(function (b) { return b.mustPlay || []; }),
+        s.solve ? [s.solve.line] : []);
+      lines.forEach(function (line) {
+        const g = new Chess(s.fen);
+        out.push(g.fen());
+        line.forEach(function (m) { if (looseMove(g, m)) out.push(g.fen()); });
+      });
+    });
+    return out.filter(function (f) { return new Chess(f).moves().length; });
+  }
+  function drillNext() {
+    const pool = drillPositions();
+    if (!pool.length || drill.n >= drill.of) return drillStop();
+    drill.fen = pool[Math.floor(Math.random() * pool.length)];
+    const moves = new Chess(drill.fen).moves();
+    drill.target = moves[Math.floor(Math.random() * moves.length)];
+    document.getElementById("drillSay").textContent = drill.target;
+    document.getElementById("drillCount").textContent = (drill.n + 1) + " / " + drill.of + " · recognised " + drill.right;
+  }
+  function drillStart() {
+    drill.on = true; drill.n = 0; drill.right = 0;
+    document.getElementById("drillPanel").classList.remove("hidden");
+    document.getElementById("drillStart").textContent = "Stop drill";
+    drillNext();
+    heard("Voice drill: hold 🎤 or turn on 🎧, say the move shown. \"skip\" skips one.");
+  }
+  function drillStop() {
+    drill.on = false;
+    document.getElementById("drillStart").textContent = "Start voice drill";
+    document.getElementById("drillSay").textContent = "";
+    heard(drill.n ? "Drill done: " + drill.right + " of " + drill.n + " recognised." : "");
+  }
+  function drillHear(blob) {
+    return recognise(blob, new Chess(drill.fen)).then(function (result) {
+      const cmd = commandOf(result.text);
+      if (cmd === "stop") return drillStop();
+      if (cmd === "skip") return drillNext();
+      const got = spokenToSan(result.text).split(" ")[0] || "";
+      const g = new Chess(drill.fen);
+      const mv = got ? looseMove(g, got) : null;
+      const ok = !!mv && norm(mv.san) === norm(drill.target);
+      drill.n++; if (ok) drill.right++;
+      heard((ok ? "✓ " : "✗ ") + "“" + result.heard + "”" + (result.text !== result.heard ? " → 2nd pass “" + result.text + "”" : "") + " → " + (got || "?") + (ok ? "" : " (wanted " + drill.target + ")"));
+      return saveSample(blob, drill.target, result.heard, "drill").then(drillNext);
+    });
+  }
+
+  function renderSampleStats(stats) {
+    const el = document.getElementById("drillStats");
+    if (!el) return;
+    if (stats && stats.count != null) { el.textContent = "Saved on this Mac (" + voiceLang().toUpperCase() + "): " + stats.count + " recordings"; return; }
+    fetch(VOICE_URL + "/samples").then(function (r) { return r.json(); }).then(function (all) {
+      const mine = all[voiceLang()];
+      el.textContent = "Saved on this Mac (" + voiceLang().toUpperCase() + "): " + (mine ? mine.count : 0) + " recordings";
+    }, function () { el.textContent = ""; });
   }
 
   function listenStart() {
@@ -793,11 +936,7 @@
         const mute = ctx.createGain();
         mute.gain.value = 0;
         const push = makeSegmenter(ctx.sampleRate, function (frames) {
-          const blob = wavBlob(frames, ctx.sampleRate);
-          heard("…");
-          // In order, one at a time, so "back" never overtakes the move it takes back.
-          listen.queue = listen.queue.then(function () { return transcribeBlob(blob); })
-            .then(function (j) { if (listen.on) voiceApply(j.text || ""); }, function () { heard("Voice server stopped."); listenStop(); });
+          if (listen.on) utterance(wavBlob(frames, ctx.sampleRate));
         });
         node.onaudioprocess = function (e) { push(new Float32Array(e.inputBuffer.getChannelData(0))); };
         src.connect(node); node.connect(mute); mute.connect(ctx.destination);
@@ -822,13 +961,13 @@
   // written line, so the board follows it and grades it; otherwise straight onto the board.
   function voiceApply(text) {
     const said = String(text || "").trim();
-    if (!said || /^[\[(].*[\])]$/.test(said)) { heard("Did not catch a move. Hold 🎤 and say it again."); return ""; }
+    if (!said || /^[\[(].*[\])]$/.test(said)) { heard("Did not catch a move. Say it again."); return {}; }
     const words = said.toLowerCase().replace(/[.,!?]/g, " ").trim().split(/\s+/);
     const only = function (set) { return words.length <= 2 && words.some(function (w) { return w in set; }); };
     const command = only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : null;
     // "done" is the spoken Lock: stopping the line stays his decision, hands-free or not.
-    if (only(SPOKEN.done)) { heard("Heard “" + said + "” → Lock"); lockStep(); return ""; }
-    if (only(SPOKEN.stop)) { listenStop(); heard("Stopped listening."); return ""; }
+    if (only(SPOKEN.done)) { heard("Heard “" + said + "” → Lock"); lockStep(); return { command: "done" }; }
+    if (only(SPOKEN.stop)) { listenStop(); heard("Stopped listening."); return { command: "stop" }; }
     const san = spokenToSan(said);
     if (takesLine()) {
       const form = document.getElementById("boardForm");
@@ -842,7 +981,7 @@
       box.value = spokenToSan(box.value + " " + said);
       followAnswer();
       heard("Heard “" + said + "” → " + (command || san || "?"));
-      return box.value;
+      return { san: command ? "" : san, command: command };
     }
     if (command === "undo") navigate("back");
     else if (command === "reset") { game = new Chess(cur().fen); selected = null; renderBoard(); }
@@ -853,13 +992,14 @@
         return !move;
       });
       renderBoard();
-      if (bad) { heard("Heard “" + said + "” → " + bad + " is not legal here."); return san; }
+      if (bad) { heard("Heard “" + said + "” → " + bad + " is not legal here."); return {}; }
       autoCheck();
     }
     heard("Heard “" + said + "” → " + (command || san));
-    return san;
+    return { san: command ? "" : san, command: command };
   }
   window.pathVoiceApply = voiceApply;
+  window.pathVoiceUtterance = function (blob) { utterance(blob || new Blob(["x"], { type: "audio/wav" })); return listen.queue; };
 
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
   function autoCheck() {
@@ -1492,6 +1632,14 @@
         langBtn.textContent = next.toUpperCase();
       });
       document.addEventListener("keyup", function (e) { if (e.key === "v") voiceStop(); });
+      const drillBtn = document.getElementById("drillStart");
+      if (drillBtn) {
+        drillBtn.addEventListener("click", function () { if (drill.on) drillStop(); else drillStart(); });
+        const keep = document.getElementById("drillKeep");
+        keep.checked = keepSamples();
+        keep.addEventListener("change", function () { try { localStorage.setItem(SAMPLE_KEY, keep.checked ? "1" : "0"); } catch (e) { /* ignore */ } });
+        document.getElementById("voiceDrill").addEventListener("toggle", function () { renderSampleStats(); });
+      }
       const listenBtn = document.getElementById("boardListen");
       if (listenBtn) listenBtn.addEventListener("click", function () { if (listen.on) { listenStop(); heard("Stopped listening."); } else listenStart(); });
       voiceCheck();

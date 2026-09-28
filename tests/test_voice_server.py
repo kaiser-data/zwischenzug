@@ -81,3 +81,26 @@ def test_hands_free_move_reaches_the_board(server, tmp_path, fake_mic_browser):
     page.wait_for_function("document.getElementById('boardStatus').textContent.includes('Black to move · Ne2')", timeout=15000)
     page.click("#boardListen")
     assert page.get_attribute("#boardListen", "aria-pressed") == "false"
+
+
+def test_spoken_forms_match_the_model(tmp_path):
+    assert voice.spoken("Nxc3", "en")[0] == "knight takes C. three"
+    assert voice.spoken("exd5", "en")[0] == "E takes D. five"
+    assert voice.spoken("Nbd7", "de")[0] == "springer b d sieben"
+    assert voice.spoken("O-O", "de") == ["kurze Rochade"]
+    g = voice.grammar(["Nf3", "e4"], "en")
+    assert '"knight F. three"' in g and '"Knight F. three"' in g and '"E. four check"' in g
+
+
+def test_samples_are_saved_with_their_label(server, tmp_path, monkeypatch):
+    monkeypatch.setattr(voice, "SAMPLES", tmp_path)
+    aiff = tmp_path / "m.aiff"
+    if not shutil.which("say"):
+        pytest.skip("needs say")
+    subprocess.run(["say", "-o", str(aiff), "knight f3"], check=True)
+    assert request(server + "/sample?lang=en&label=Nf3&heard=knight%20F.%20three&source=drill", "POST", aiff.read_bytes())[0] == 200
+    assert request(server + "/sample?lang=en&label=hello", "POST", aiff.read_bytes())[0] == 400
+    rows = [json.loads(l) for l in (tmp_path / "en" / "manifest.jsonl").read_text().splitlines()]
+    assert rows[0]["label"] == "Nf3" and rows[0]["heard"] == "knight F. three"
+    assert (tmp_path / "en" / rows[0]["file"]).exists()
+    assert json.loads(request(server + "/samples")[2])["en"]["count"] == 1

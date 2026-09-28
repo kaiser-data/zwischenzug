@@ -597,3 +597,84 @@ def test_saying_done_locks(browser_page, app_url):
     page.evaluate("t => window.pathVoiceApply(t)", "fertig")
     assert page.is_disabled("#boardLock")
     assert page.errors == []
+
+
+FAKE_VOICE = """
+window.__calls = []; window.__say = [];
+const reply = j => Promise.resolve({ ok: true, json: () => Promise.resolve(j) });
+window.fetch = (url, opts) => {
+  url = String(url); window.__calls.push(url);
+  if (url.includes('/health')) return reply({ ok: true });
+  if (url.includes('/samples')) return reply({ en: { count: 0 } });
+  if (url.includes('/sample?')) return reply({ saved: 'x', stats: { count: window.__calls.filter(c => c.includes('/sample?')).length } });
+  if (url.includes('/transcribe')) {
+    const next = window.__say.shift();
+    return reply({ text: typeof next === 'function' ? next(url.includes('moves=')) : next });
+  }
+  return reply({});
+};
+"""
+
+
+def voice_page(browser_page, app_url, step):
+    page = browser_page
+    page.add_init_script(FAKE_VOICE)
+    open_step(page, app_url, CLEAN_SESSION, step)
+    page.wait_for_function("document.getElementById('boardMic').getAttribute('aria-disabled') === 'false'")
+    return page
+
+
+def say(page, *texts):
+    """Queue what the fake server hears, then send one recording per text."""
+    for t in texts:
+        page.evaluate("t => window.__say.push(t)", t)
+        page.evaluate("() => window.pathVoiceUtterance()")
+
+
+def test_an_illegal_hearing_gets_a_second_pass_held_to_legal_moves(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    page.evaluate("() => window.__say.push(second => second ? 'knight E. two' : 'to E. two')")
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
+    second = [c for c in page.evaluate("window.__calls") if "moves=" in c]
+    assert len(second) == 1 and "Ne2" in second[0]
+
+
+def test_noise_gets_no_second_pass(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    say(page, "[BLANK_AUDIO]")
+    assert not [c for c in page.evaluate("window.__calls") if "moves=" in c]
+    assert "Did not catch" in page.inner_text("#voiceHeard")
+
+
+def test_a_correction_after_back_is_kept_as_a_sample(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    page.evaluate("() => localStorage.setItem('zwischenzug_voice_keep', '1')")
+    say(page, "knight E. two", "back", "knight F. three")
+    samples = [c for c in page.evaluate("window.__calls") if "/sample?" in c]
+    assert len(samples) == 1 and "label=Nf3" in samples[0] and "source=correction" in samples[0]
+    assert "heard=knight%20E.%20two" in samples[0]
+
+
+def test_samples_stay_off_unless_he_opts_in(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    say(page, "knight E. two", "back", "knight F. three")
+    page.wait_for_timeout(200)
+    assert not [c for c in page.evaluate("window.__calls") if "/sample?" in c]
+
+
+def test_voice_drill_scores_and_saves_each_recording(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    page.click("#voiceDrill summary")
+    page.click("#drillStart")
+    target = page.inner_text("#drillSay")
+    assert target
+    page.evaluate("() => window.__say.push(() => document.getElementById('drillSay').textContent)")
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert "✓" in page.inner_text("#voiceHeard")
+    assert "recognised 1" in page.inner_text("#drillCount")
+    saved = [c for c in page.evaluate("window.__calls") if "/sample?" in c]
+    assert len(saved) == 1 and "source=drill" in saved[0]
+    page.click("#drillStart")
+    assert "1 of 1" in page.inner_text("#voiceHeard")
+    assert page.errors == []
