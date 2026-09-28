@@ -398,6 +398,8 @@
     long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
     undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
+    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1 },
+    stop: { stop: 1, stopp: 1, halt: 1 },
     reset: { reset: 1, "zurücksetzen": 1, zuruecksetzen: 1, vorne: 1, vorn: 1, clear: 1, "löschen": 1 },
     filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
@@ -661,6 +663,11 @@
     const btn = document.getElementById("boardMic");
     if (!btn) return;
     btn.setAttribute("aria-disabled", ok ? "false" : "true");
+    const lb = document.getElementById("boardListen");
+    if (lb) {
+      lb.setAttribute("aria-disabled", ok ? "false" : "true");
+      lb.title = ok ? "Hands-free: listen for moves until you say stop (l)" : "Voice is off. Start it with: python3 scripts/voice_server.py";
+    }
     btn.title = ok ? "Hold and say one move (or hold v). Commands: back, reset"
       : "Voice is off. Start it with: python3 scripts/voice_server.py";
   }
@@ -713,14 +720,115 @@
       .then(function (j) { voiceApply(j.text || ""); }, function () { setVoiceReady(false); heard("Voice server stopped."); });
   }
 
+  // Active listening: cut the microphone stream into utterances by loudness, no button needed.
+  // A frame is speech when it is clearly above the room's noise floor; an utterance ends after
+  // SILENCE_MS of quiet, keeps PREROLL_MS before its start so the first consonant survives.
+  const LISTEN = { PREROLL_MS: 300, SILENCE_MS: 700, MIN_MS: 250, MAX_MS: 4000, START_FRAMES: 2 };
+  function makeSegmenter(rate, onSegment) {
+    let floor = 0.004, speaking = false, loud = 0, quietMs = 0, frames = [], pre = [], preMs = 0, spokenMs = 0;
+    return function push(frame) {
+      let sum = 0;
+      for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+      const rms = Math.sqrt(sum / frame.length);
+      const ms = frame.length / rate * 1000;
+      const isSpeech = rms > Math.max(0.012, floor * 3.5);
+      if (!speaking) {
+        if (!isSpeech) floor = floor * 0.95 + rms * 0.05;
+        pre.push(frame); preMs += ms;
+        while (preMs > LISTEN.PREROLL_MS && pre.length > 1) preMs -= pre.shift().length / rate * 1000;
+        loud = isSpeech ? loud + 1 : 0;
+        if (loud >= LISTEN.START_FRAMES) {
+          speaking = true; frames = pre; pre = []; preMs = 0; quietMs = 0; spokenMs = loud * ms;
+        }
+        return;
+      }
+      frames.push(frame);
+      spokenMs += ms;
+      quietMs = isSpeech ? 0 : quietMs + ms;
+      if (quietMs >= LISTEN.SILENCE_MS || spokenMs >= LISTEN.MAX_MS) {
+        speaking = false; loud = 0;
+        if (spokenMs - quietMs >= LISTEN.MIN_MS) onSegment(frames);
+        frames = [];
+      }
+    };
+  }
+  window.pathMakeSegmenter = makeSegmenter;
+
+  function wavBlob(frames, rate) {
+    const n = frames.reduce(function (a, f) { return a + f.length; }, 0);
+    const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const str = function (o, t) { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE"); str(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, n * 2, true);
+    let o = 44;
+    frames.forEach(function (f) {
+      for (let i = 0; i < f.length; i++, o += 2) v.setInt16(o, Math.max(-1, Math.min(1, f[i])) * 0x7fff, true);
+    });
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  const listen = { on: false, ctx: null, stream: null, node: null, queue: Promise.resolve() };
+
+  function transcribeBlob(blob) {
+    return fetch(VOICE_URL + "/transcribe?lang=" + voiceLang(), { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
+      .then(function (r) { return r.json(); });
+  }
+
+  function listenStart() {
+    if (listen.on) return;
+    if (!voice.ready) {
+      heard("Voice is off. In a terminal: python3 scripts/voice_server.py — then press 🎧 again.");
+      voiceCheck();
+      return;
+    }
+    listen.on = true;
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .then(function (stream) {
+        if (!listen.on) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaStreamSource(stream);
+        const node = ctx.createScriptProcessor(2048, 1, 1);
+        const mute = ctx.createGain();
+        mute.gain.value = 0;
+        const push = makeSegmenter(ctx.sampleRate, function (frames) {
+          const blob = wavBlob(frames, ctx.sampleRate);
+          heard("…");
+          // In order, one at a time, so "back" never overtakes the move it takes back.
+          listen.queue = listen.queue.then(function () { return transcribeBlob(blob); })
+            .then(function (j) { if (listen.on) voiceApply(j.text || ""); }, function () { heard("Voice server stopped."); listenStop(); });
+        });
+        node.onaudioprocess = function (e) { push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+        src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+        Object.assign(listen, { ctx: ctx, stream: stream, node: node });
+        document.getElementById("boardListen").classList.add("on");
+        document.getElementById("boardListen").setAttribute("aria-pressed", "true");
+        heard("Listening. Say a move — or back, reset, done, stop.");
+      }, function () { listen.on = false; heard("No microphone: allow it for this page in Chrome's address bar."); });
+  }
+
+  function listenStop() {
+    listen.on = false;
+    if (listen.node) listen.node.disconnect();
+    if (listen.stream) listen.stream.getTracks().forEach(function (t) { t.stop(); });
+    if (listen.ctx) listen.ctx.close();
+    Object.assign(listen, { ctx: null, stream: null, node: null });
+    const btn = document.getElementById("boardListen");
+    if (btn) { btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false"); }
+  }
+
   // One utterance: a move (or a few), or a command. Into the answer box when the step takes a
   // written line, so the board follows it and grades it; otherwise straight onto the board.
   function voiceApply(text) {
     const said = String(text || "").trim();
     if (!said || /^[\[(].*[\])]$/.test(said)) { heard("Did not catch a move. Hold 🎤 and say it again."); return ""; }
     const words = said.toLowerCase().replace(/[.,!?]/g, " ").trim().split(/\s+/);
-    const command = words.length <= 2 && words.some(function (w) { return w in SPOKEN.undo; }) ? "undo"
-      : words.length <= 2 && words.some(function (w) { return w in SPOKEN.reset; }) ? "reset" : null;
+    const only = function (set) { return words.length <= 2 && words.some(function (w) { return w in set; }); };
+    const command = only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : null;
+    // "done" is the spoken Lock: stopping the line stays his decision, hands-free or not.
+    if (only(SPOKEN.done)) { heard("Heard “" + said + "” → Lock"); lockStep(); return ""; }
+    if (only(SPOKEN.stop)) { listenStop(); heard("Stopped listening."); return ""; }
     const san = spokenToSan(said);
     if (takesLine()) {
       const form = document.getElementById("boardForm");
@@ -1337,6 +1445,7 @@
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) return;
       if (e.key === "f") { e.preventDefault(); flipBoard(); return; }
       if (e.key === "v") { e.preventDefault(); if (!e.repeat) voiceStart(); return; }
+      if (e.key === "l") { e.preventDefault(); if (listen.on) { listenStop(); heard("Stopped listening."); } else listenStart(); return; }
       const dir = { ArrowLeft: "back", ArrowRight: "fwd", ArrowUp: "start", ArrowDown: "end", Home: "start", End: "end" }[e.key];
       if (!dir) return;
       e.preventDefault();
@@ -1383,6 +1492,8 @@
         langBtn.textContent = next.toUpperCase();
       });
       document.addEventListener("keyup", function (e) { if (e.key === "v") voiceStop(); });
+      const listenBtn = document.getElementById("boardListen");
+      if (listenBtn) listenBtn.addEventListener("click", function () { if (listen.on) { listenStop(); heard("Stopped listening."); } else listenStart(); });
       voiceCheck();
     }
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.

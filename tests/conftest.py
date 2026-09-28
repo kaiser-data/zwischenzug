@@ -6,11 +6,32 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope="session")
-def _browser():
+def _playwright():
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome")
-        yield browser
-        browser.close()
+        yield p
+
+
+@pytest.fixture(scope="session")
+def _browser(_playwright):
+    browser = _playwright.chromium.launch(channel="chrome")
+    yield browser
+    browser.close()
+
+
+@pytest.fixture
+def fake_mic_browser(_playwright):
+    """A Chrome whose microphone plays a given WAV file on a loop: fake_mic_browser(path)."""
+    opened = []
+
+    def launch(wav):
+        browser = _playwright.chromium.launch(channel="chrome", args=[
+            "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream",
+            "--use-file-for-fake-audio-capture=" + str(wav)])
+        opened.append(browser)
+        return browser
+    yield launch
+    for b in opened:
+        b.close()
 
 
 @pytest.fixture

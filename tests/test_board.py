@@ -559,3 +559,41 @@ def test_mic_says_how_to_start_the_server_when_it_is_off(browser_page, app_url):
     page.dispatch_event("#boardMic", "pointerdown")
     assert "voice_server.py" in page.inner_text("#voiceHeard")
     assert page.errors == []
+
+
+SEGMENT = """([rate, parts]) => {
+  const out = [];
+  const push = window.pathMakeSegmenter(rate, f => out.push(f.reduce((a, x) => a + x.length, 0) / rate));
+  for (const [secs, amp] of parts) {
+    const n = Math.round(secs * rate / 2048);
+    for (let k = 0; k < n; k++) {
+      const f = new Float32Array(2048);
+      for (let i = 0; i < f.length; i++) f[i] = amp * Math.sin((k * 2048 + i) / rate * 2 * Math.PI * 220) + (Math.random() - .5) * 0.004;
+      push(f);
+    }
+  }
+  return out;
+}"""
+
+
+def test_listening_cuts_speech_into_utterances(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    one = page.evaluate(SEGMENT, [48000, [[1, 0], [0.6, 0.3], [1.2, 0]]])
+    assert len(one) == 1 and 0.6 <= one[0] <= 1.8, one
+    two = page.evaluate(SEGMENT, [48000, [[1, 0], [0.5, 0.3], [1, 0], [0.5, 0.3], [1, 0]]])
+    assert len(two) == 2
+    click = page.evaluate(SEGMENT, [48000, [[1, 0], [0.05, 0.5], [1.2, 0]]])
+    assert click == [], "a click is not a move"
+
+
+def test_saying_done_locks(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 4)
+    page.fill("textarea[name=stop]", "it was already winning")
+    page.select_option("select[name=tag]", "clean")
+    page.fill("textarea[name=note]", "x")
+    page.evaluate("t => window.pathVoiceApply(t)", "fertig")
+    assert page.is_disabled("#boardLock")
+    assert page.errors == []

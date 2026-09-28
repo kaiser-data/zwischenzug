@@ -61,3 +61,23 @@ def test_a_spoken_move_comes_back_as_text(server, tmp_path):
     text = json.loads(body)["text"].lower()
     assert status == 200
     assert "knight" in text and "c" in text and ("3" in text or "three" in text)
+
+
+@pytest.mark.skipif(not (HAVE_MODEL and HAVE_TOOLS), reason="chess speech model or whisper-cli/ffmpeg/say missing")
+def test_hands_free_move_reaches_the_board(server, tmp_path, fake_mic_browser):
+    aiff, wav = tmp_path / "m.aiff", tmp_path / "m.wav"
+    subprocess.run(["say", "-v", "Samantha", "-o", str(aiff), "knight e2"], check=True)
+    # Silence before and after, so the loop plays one clear utterance at a time.
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(aiff), "-af", "adelay=1000,apad=pad_dur=3",
+                    "-ar", "48000", "-ac", "1", str(wav)], check=True)
+    page = fake_mic_browser(wav).new_page()
+    page.add_init_script(f"window.PATH_VOICE_URL = '{server}'")
+    page.goto("file://" + str(ROOT / "index.html") + "?session=6yfxgu80#session")
+    page.wait_for_selector("#boardSteps button")
+    page.locator("#boardSteps button").nth(0).click()
+    page.wait_for_function("document.getElementById('boardListen').getAttribute('aria-disabled') === 'false'")
+
+    page.click("#boardListen")
+    page.wait_for_function("document.getElementById('boardStatus').textContent.includes('Black to move · Ne2')", timeout=15000)
+    page.click("#boardListen")
+    assert page.get_attribute("#boardListen", "aria-pressed") == "false"
