@@ -400,7 +400,10 @@
     undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
     done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
-    skip: { skip: 1, weiter: 1, next: 1 },
+    skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, naechster: 1, naechste: 1 },
+    prev: { previous: 1, vorher: 1, vorige: 1, voriger: 1, "vorheriger": 1 },
+    redo: { redo: 1, nochmal: 1, again: 1, wiederholen: 1 },
+    flip: { flip: 1, drehen: 1, umdrehen: 1 },
     reset: { reset: 1, "zurücksetzen": 1, zuruecksetzen: 1, vorne: 1, vorn: 1, clear: 1, "löschen": 1 },
     filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
@@ -667,7 +670,7 @@
     const lb = document.getElementById("boardListen");
     if (lb) {
       lb.setAttribute("aria-disabled", ok ? "false" : "true");
-      lb.title = ok ? "Hands-free: listen for moves until you say stop (l)" : "Voice is off. Start it with: python3 scripts/voice_server.py";
+      lb.title = ok ? "Hands-free: listen for moves and commands (next, previous, redo, flip, done) until you say stop (l). Stays on after a reload." : "Voice is off. Start it with: python3 scripts/voice_server.py";
     }
     btn.title = ok ? "Hold and say one move (or hold v). Commands: back, reset"
       : "Voice is off. Start it with: python3 scripts/voice_server.py";
@@ -676,7 +679,11 @@
   function voiceCheck() {
     if (typeof fetch !== "function") return;
     fetch(VOICE_URL + "/health").then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { setVoiceReady(!!(j && j.ok)); }, function () { setVoiceReady(false); });
+      .then(function (j) {
+        setVoiceReady(!!(j && j.ok));
+        // 🎧 stays on across reloads and sessions until he says stop or presses it off.
+        if (voice.ready && listenWanted() && !listen.on) listenStart();
+      }, function () { setVoiceReady(false); });
   }
 
   function heard(msg) {
@@ -766,7 +773,11 @@
     return new Blob([buf], { type: "audio/wav" });
   }
 
-  const listen = { on: false, ctx: null, stream: null, node: null, queue: Promise.resolve() };
+  const listen = { on: false, ctx: null, stream: null, node: null, wake: null, queue: Promise.resolve() };
+  const LISTEN_KEY = "zwischenzug_voice_listen";
+  const LISTEN_HINT = "Listening. Say a move — or back, reset, done, next, previous, redo, flip, stop.";
+  function rememberListen(on) { try { localStorage.setItem(LISTEN_KEY, on ? "1" : "0"); } catch (e) { /* ignore */ } }
+  function listenWanted() { try { return localStorage.getItem(LISTEN_KEY) === "1"; } catch (e) { return false; } }
 
   function transcribeBlob(blob, moves) {
     const q = "?lang=" + voiceLang() + (moves ? "&moves=" + encodeURIComponent(moves.join(",")) : "");
@@ -791,7 +802,8 @@
     const words = String(text).toLowerCase().replace(/[.,!?]/g, " ").trim().split(/\s+/);
     const only = function (set) { return words.length <= 2 && words.some(function (w) { return w in set; }); };
     return only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : only(SPOKEN.done) ? "done"
-      : only(SPOKEN.stop) ? "stop" : only(SPOKEN.skip) ? "skip" : null;
+      : only(SPOKEN.stop) ? "stop" : only(SPOKEN.skip) ? "skip" : only(SPOKEN.prev) ? "prev"
+      : only(SPOKEN.redo) ? "redo" : only(SPOKEN.flip) ? "flip" : null;
   }
 
   const CHESSY = /[a-h]\s*\.?\s*[1-8]|\b[a-h]\b|knight|bishop|rook|queen|king|castle|springer|läufer|turm|dame|könig|rochade/i;
@@ -802,9 +814,12 @@
     return transcribeBlob(blob).then(function (j) {
       const text = j.text || "";
       if (commandOf(text) || !CHESSY.test(text) || legalIn(new Chess(g.fen()), spokenToSan(text))) return { text: text, heard: text };
+      // The grammar holds one move; it wins only when it gets further than the free hearing
+      // (a sequence whose third move was misheard keeps its first two).
+      const first = legalPrefix(g, spokenToSan(text)).moves.length;
       return transcribeBlob(blob, g.moves()).then(function (j2) {
         const again = j2.text || "";
-        return legalIn(new Chess(g.fen()), spokenToSan(again)) ? { text: again, heard: text } : { text: text, heard: text };
+        return legalPrefix(g, spokenToSan(again)).moves.length > first ? { text: again, heard: text } : { text: text, heard: text };
       }, function () { return { text: text, heard: text }; });
     });
   }
@@ -850,8 +865,13 @@
     listen.queue = listen.queue.then(function () {
       if (drill.on) return drillHear(blob);
       return recognise(blob, positionNow()).then(function (result) {
-        const applied = voiceApply(result.text).san;
-        noteSample(blob, result, applied);
+        const res = voiceApply(result.text);
+        if (res.rejected && !res.san && keepSamples() && !drill.on) {
+          flushPending();
+          samples.misheard = { blob: blob, heard: result.heard };
+          return;
+        }
+        noteSample(blob, result, res.san);
       });
     }).catch(function () { setVoiceReady(false); heard("Voice server stopped."); listenStop(); });
   }
@@ -943,12 +963,27 @@
         Object.assign(listen, { ctx: ctx, stream: stream, node: node });
         document.getElementById("boardListen").classList.add("on");
         document.getElementById("boardListen").setAttribute("aria-pressed", "true");
-        heard("Listening. Say a move — or back, reset, done, stop.");
+        rememberListen(true);
+        if (ctx.state === "suspended") {
+          // Opened at page load: Chrome holds audio until the first click or key on the page.
+          heard("🎧 is back on — click anywhere or press a key once to open the microphone.");
+          listen.wake = function () {
+            unwake();
+            if (ctx.state === "suspended") ctx.resume().then(function () { if (listen.on) heard(LISTEN_HINT); }, function () { /* closed meanwhile */ });
+          };
+          ["pointerdown", "keydown"].forEach(function (t) { document.addEventListener(t, listen.wake, true); });
+        } else heard(LISTEN_HINT);
       }, function () { listen.on = false; heard("No microphone: allow it for this page in Chrome's address bar."); });
+  }
+
+  function unwake() {
+    if (listen.wake) ["pointerdown", "keydown"].forEach(function (t) { document.removeEventListener(t, listen.wake, true); });
+    listen.wake = null;
   }
 
   function listenStop() {
     listen.on = false;
+    unwake();
     if (listen.node) listen.node.disconnect();
     if (listen.stream) listen.stream.getTracks().forEach(function (t) { t.stop(); });
     if (listen.ctx) listen.ctx.close();
@@ -967,8 +1002,22 @@
     const command = only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : null;
     // "done" is the spoken Lock: stopping the line stays his decision, hands-free or not.
     if (only(SPOKEN.done)) { heard("Heard “" + said + "” → Lock"); lockStep(); return { command: "done" }; }
-    if (only(SPOKEN.stop)) { listenStop(); heard("Stopped listening."); return { command: "stop" }; }
-    const san = spokenToSan(said);
+    if (only(SPOKEN.stop)) { listenStop(); rememberListen(false); heard("Stopped listening."); return { command: "stop" }; }
+    const nav = commandOf(said);
+    if (nav === "skip" || nav === "prev" || nav === "redo" || nav === "flip") {
+      heard("Heard “" + said + "” → " + spokenNav(nav));
+      return { command: nav };
+    }
+    // A move is checked before it goes anywhere: what is not legal here never enters the line,
+    // so a misheard move costs nothing — a low tone, and he says it again.
+    const taken = command ? { moves: [], bad: null, why: "" } : legalPrefix(positionNow(), spokenToSan(said));
+    if (!command && !taken.moves.length) {
+      cue(false);
+      heard("✗ “" + said + "” → " + taken.why + " Say it again.");
+      return { rejected: true };
+    }
+    const san = taken.moves.join(" ");
+    const rest = taken.bad ? " · did not get " + taken.bad + " (" + taken.why.replace(/\.$/, "") + "), say it again" : "";
     if (takesLine()) {
       const form = document.getElementById("boardForm");
       const s = cur();
@@ -978,27 +1027,107 @@
         if (command && !String(box.value).trim()) box = form.elements.scare;
       }
       // Re-read the whole box so "back" / "reset" act on what is already written.
-      box.value = spokenToSan(box.value + " " + said);
+      box.value = spokenToSan(box.value + " " + (command ? said : san)).trim();
       followAnswer();
-      heard("Heard “" + said + "” → " + (command || san || "?"));
-      return { san: command ? "" : san, command: command };
-    }
-    if (command === "undo") navigate("back");
+    } else if (command === "undo") navigate("back");
     else if (command === "reset") { game = new Chess(cur().fen); selected = null; renderBoard(); }
     else {
-      const bad = san.split(" ").filter(Boolean).find(function (m) {
-        const move = looseMove(game, m);
-        if (move) keepFuture(move);
-        return !move;
-      });
+      taken.moves.forEach(function (m) { keepFuture(game.move(m)); });
       renderBoard();
-      if (bad) { heard("Heard “" + said + "” → " + bad + " is not legal here."); return {}; }
       autoCheck();
     }
-    heard("Heard “" + said + "” → " + (command || san));
-    return { san: command ? "" : san, command: command };
+    cue(!taken.bad);
+    heard("✓ “" + said + "” → " + (command || san) + rest);
+    return { san: command ? "" : san, command: command, rejected: !!taken.bad };
+  }
+
+  // The moves of a spoken line that are legal one after another, in real SAN; the first one that
+  // is not, and why — ambiguous (two pieces can go there) is named, so he can say which.
+  function legalPrefix(g0, san) {
+    const g = new Chess(g0.fen());
+    const out = { moves: [], bad: null, why: "" };
+    const words = String(san || "").split(" ").filter(Boolean);
+    if (!words.length) { out.why = "not a move."; return out; }
+    for (let i = 0; i < words.length; i++) {
+      const mv = looseMove(g, words[i]);
+      if (mv) { out.moves.push(mv.san); continue; }
+      out.bad = words[i];
+      const to = (words[i].match(/[a-h][1-8]/g) || []).pop();
+      const piece = (words[i].match(/^[KQRBN]/) || ["P"])[0].toLowerCase();
+      const fits = to ? g.moves({ verbose: true }).filter(function (m) { return m.to === to && m.piece === piece; }) : [];
+      out.why = fits.length > 1 ? "which one: " + fits.map(function (m) { return m.san; }).join(" or ") + "?"
+        : SAN_RE.test(words[i]) ? words[i] + " is not legal here." : "not a move.";
+      break;
+    }
+    return out;
+  }
+
+  window.pathLegalPrefix = function (fen, san) { return legalPrefix(new Chess(fen), san); };
+
+  // Short tones so he need not look: a tick when a move went in, a low double tone when it did not.
+  // Echo cancellation keeps them out of the microphone; they are shorter than the shortest utterance anyway.
+  let cueCtx = null;
+  function cue(ok) {
+    try {
+      cueCtx = cueCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (cueCtx.state === "suspended") cueCtx.resume();
+      (ok ? [[1320, 0]] : [[330, 0], [247, 0.13]]).forEach(function (n) {
+        const o = cueCtx.createOscillator(), v = cueCtx.createGain(), t = cueCtx.currentTime + n[1];
+        o.frequency.value = n[0];
+        v.gain.setValueAtTime(0.0001, t);
+        v.gain.exponentialRampToValueAtTime(0.08, t + 0.01);
+        v.gain.exponentialRampToValueAtTime(0.0001, t + (ok ? 0.07 : 0.11));
+        o.connect(v); v.connect(cueCtx.destination);
+        o.start(t); o.stop(t + 0.13);
+      });
+    } catch (e) { /* no audio: the text line still says it */ }
   }
   window.pathVoiceApply = voiceApply;
+
+  // Spoken navigation, so a whole session runs without the mouse: next / previous step, redo, flip.
+  // "next" on the last step opens the next unfinished session of the same group (drill after drill).
+  function spokenNav(nav) {
+    if (nav === "flip") { flipBoard(); return "board turned"; }
+    if (nav === "redo") {
+      if (!locked[step]) return "nothing to redo, this step is open";
+      redoStep();
+      return "step reopened";
+    }
+    if (nav === "prev") {
+      if (step === 0) return "already the first step";
+      captureAnswers(); saveProgress(); loadStep(step - 1);
+      return "step " + (step + 1) + ": " + cur().name;
+    }
+    if (step < steps().length - 1) {
+      captureAnswers(); saveProgress(); loadStep(step + 1);
+      return "step " + (step + 1) + ": " + cur().name;
+    }
+    const nextId = nextOpenSession();
+    if (!nextId) return "last step, and nothing open after this session";
+    captureAnswers(); saveProgress();
+    loadSession(nextId);
+    return (session.title || nextId);
+  }
+
+  function sessionDone(id) {
+    const all = sessions()[id].steps || [];
+    const p = typeof window.pathProgress === "object" ? window.pathProgress.get(id) : { steps: {} };
+    return all.length > 0 && all.every(function (st, i) {
+      const e = p.steps[st.id || ("step" + i)];
+      return !!(e && e.locked);
+    });
+  }
+
+  // Drills in a group go in id order (6-01, 6-02 …); games newest first, like the picker.
+  function nextOpenSession() {
+    const group = session && session.group;
+    const ids = group
+      ? Object.keys(sessions()).filter(function (id) { return sessions()[id].group === group; }).sort()
+      : orderedIds().filter(function (id) { return !sessions()[id].group; });
+    const at = ids.indexOf(sessionId);
+    const order = ids.slice(at + 1).concat(ids.slice(0, Math.max(0, at)));
+    return order.find(function (id) { return !sessionDone(id); }) || null;
+  }
   window.pathVoiceUtterance = function (blob) { utterance(blob || new Blob(["x"], { type: "audio/wav" })); return listen.queue; };
 
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
@@ -1585,7 +1714,7 @@
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) return;
       if (e.key === "f") { e.preventDefault(); flipBoard(); return; }
       if (e.key === "v") { e.preventDefault(); if (!e.repeat) voiceStart(); return; }
-      if (e.key === "l") { e.preventDefault(); if (listen.on) { listenStop(); heard("Stopped listening."); } else listenStart(); return; }
+      if (e.key === "l") { e.preventDefault(); if (listen.on) { listenStop(); rememberListen(false); heard("Stopped listening."); } else listenStart(); return; }
       const dir = { ArrowLeft: "back", ArrowRight: "fwd", ArrowUp: "start", ArrowDown: "end", Home: "start", End: "end" }[e.key];
       if (!dir) return;
       e.preventDefault();
@@ -1641,7 +1770,7 @@
         document.getElementById("voiceDrill").addEventListener("toggle", function () { renderSampleStats(); });
       }
       const listenBtn = document.getElementById("boardListen");
-      if (listenBtn) listenBtn.addEventListener("click", function () { if (listen.on) { listenStop(); heard("Stopped listening."); } else listenStart(); });
+      if (listenBtn) listenBtn.addEventListener("click", function () { if (listen.on) { listenStop(); rememberListen(false); heard("Stopped listening."); } else listenStart(); });
       voiceCheck();
     }
     // Enter in an answer box locks; without this a one-field form submits and reloads the page.

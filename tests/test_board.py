@@ -678,3 +678,106 @@ def test_voice_drill_scores_and_saves_each_recording(browser_page, app_url):
     page.click("#drillStart")
     assert "1 of 1" in page.inner_text("#voiceHeard")
     assert page.errors == []
+
+
+def test_spoken_navigation_runs_the_steps_without_the_mouse(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 0)
+    apply = "t => window.pathVoiceApply(t)"
+    page.evaluate(apply, "weiter")
+    assert page.locator("#boardSteps button").nth(1).get_attribute("aria-current") == "step"
+    page.evaluate(apply, "next")
+    assert page.locator("#boardSteps button").nth(2).get_attribute("aria-current") == "step"
+    page.evaluate(apply, "vorher")
+    assert page.locator("#boardSteps button").nth(1).get_attribute("aria-current") == "step"
+    page.evaluate(apply, "drehen")
+    assert "board turned" in page.inner_text("#voiceHeard")
+    assert page.errors == []
+
+
+def test_saying_redo_reopens_a_locked_step(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 4)
+    page.fill("textarea[name=stop]", "it was already winning")
+    page.select_option("select[name=tag]", "clean")
+    page.fill("textarea[name=note]", "x")
+    page.evaluate("t => window.pathVoiceApply(t)", "fertig")
+    assert page.is_disabled("#boardLock")
+    page.evaluate("t => window.pathVoiceApply(t)", "nochmal")
+    assert not page.is_disabled("#boardLock")
+    assert page.errors == []
+
+
+def test_next_on_the_last_locked_step_opens_the_next_open_session(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 4)
+    page.fill("textarea[name=stop]", "it was already winning")
+    page.select_option("select[name=tag]", "clean")
+    page.fill("textarea[name=note]", "x")
+    page.evaluate("t => window.pathVoiceApply(t)", "fertig")
+    page.evaluate("t => window.pathVoiceApply(t)", "weiter")
+    assert page.input_value("#sessionPick") not in ("", CLEAN_SESSION)
+    assert page.errors == []
+
+
+FAKE_MIC = """
+navigator.mediaDevices.getUserMedia = () => {
+  const ctx = new AudioContext();
+  return Promise.resolve(ctx.createMediaStreamDestination().stream);
+};
+"""
+
+
+def test_hands_free_stays_on_after_a_reload_until_turned_off(browser_page, app_url):
+    page = browser_page
+    page.add_init_script(FAKE_VOICE)
+    page.add_init_script(FAKE_MIC)
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_function("document.getElementById('boardMic').getAttribute('aria-disabled') === 'false'")
+    assert page.get_attribute("#boardListen", "aria-pressed") == "false", "off until he turns it on"
+    page.click("#boardListen")
+    page.wait_for_function("document.getElementById('boardListen').getAttribute('aria-pressed') === 'true'")
+
+    page.reload()
+    page.wait_for_function("document.getElementById('boardListen').getAttribute('aria-pressed') === 'true'")
+    page.click("#boardListen")
+    assert page.evaluate("localStorage.getItem('zwischenzug_voice_listen')") == "0"
+    page.reload()
+    page.wait_for_function("document.getElementById('boardMic').getAttribute('aria-disabled') === 'false'")
+    page.wait_for_timeout(300)
+    assert page.get_attribute("#boardListen", "aria-pressed") == "false"
+    assert page.errors == []
+
+
+def test_a_misheard_move_never_enters_the_line(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    apply = "t => window.pathVoiceApply(t)"
+    page.evaluate(apply, "Queen d4")
+    res = page.evaluate(apply, "king h5")                # not legal: nothing is written
+    assert res["rejected"] is True
+    assert page.input_value("input[name=line]") == "Qd4"
+    assert "Say it again" in page.inner_text("#voiceHeard")
+    page.evaluate(apply, "banana")                       # not a move at all
+    assert page.input_value("input[name=line]") == "Qd4"
+    page.evaluate(apply, "knight e4")                    # said again, right this time
+    assert page.input_value("input[name=line]") == "Qd4 Ne4"
+    assert page.errors == []
+
+
+def test_a_spoken_sequence_is_taken_as_far_as_it_is_legal(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.evaluate("t => window.pathVoiceApply(t)", "Dame d4 Springer e4 König h5")
+    assert page.input_value("input[name=line]") == "Qd4 Ne4"
+    assert "did not get Kh5" in page.inner_text("#voiceHeard")
+
+
+def test_an_ambiguous_move_names_both_pieces(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    got = page.evaluate("([f, s]) => window.pathLegalPrefix(f, s)", ["4k3/8/8/8/8/8/8/1N2KN2 w - - 0 1", "Nd2"])
+    assert got["moves"] == [] and got["why"] == "which one: Nbd2 or Nfd2?"
+    # the reader keeps a spoken file, so he can say which knight
+    assert page.evaluate("t => window.pathSpokenToSan(t)", "Springer b d2") == "Nbd2"
