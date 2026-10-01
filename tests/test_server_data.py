@@ -3,6 +3,7 @@ import pytest
 from server.db import Db
 from server.ratelimit import RateLimit
 from server.settings import Settings
+from server_fixtures import FRIEND, OWNER, login
 
 
 def test_settings_from_env(monkeypatch, tmp_path):
@@ -55,3 +56,28 @@ def test_rate_limit_window():
     rl = RateLimit(2, 60)
     assert rl.hit("k", 0) and rl.hit("k", 1) and not rl.hit("k", 2)
     assert rl.hit("k", 61) and rl.hit("other", 2)
+
+
+def test_drills_are_owner_only(client, mailer):
+    login(client, mailer, FRIEND)
+    assert client.get("/api/drills/bundle.js").status_code == 403
+    assert client.put("/api/drills/bundle.js", content=b"x").status_code == 403
+    client.cookies.clear()
+    login(client, mailer, OWNER)
+    assert client.get("/api/drills/bundle.js").status_code == 404
+    assert client.put("/api/drills/bundle.js", content=b"window.PATH_PRIVATE = {};").status_code == 200
+    r = client.get("/api/drills/bundle.js")
+    assert r.status_code == 200 and r.text == "window.PATH_PRIVATE = {};"
+    assert r.headers["content-type"].startswith("application/javascript")
+    assert r.headers["cache-control"] == "private, no-store"
+
+
+def test_progress_round_trip_and_conflict(client, mailer):
+    assert client.get("/api/progress").status_code == 401
+    login(client, mailer, FRIEND)
+    assert client.get("/api/progress").json() == {"state": None, "updated": None}
+    first = client.put("/api/progress", json={"state": {"progress": {"a": 1}}, "base": None}).json()["updated"]
+    stale = client.put("/api/progress", json={"state": {"progress": {"a": 2}}, "base": first - 1})
+    assert stale.status_code == 409 and stale.json()["state"] == {"progress": {"a": 1}}
+    assert client.put("/api/progress", json={"state": {"progress": {"a": 2}}, "base": first}).status_code == 200
+    assert client.get("/api/progress").json()["state"] == {"progress": {"a": 2}}

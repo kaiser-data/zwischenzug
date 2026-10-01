@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from server import auth, check_api
+from server import auth, check_api, drills, progress, voice_api
 from server.db import Db
 from server.engine import Engine
 from server.mailer import ResendMailer
@@ -23,6 +23,7 @@ def create_app(settings: Settings, mailer=None, google_verify=None, engine=None)
         engine = Engine(settings.stockfish)
     app.state.engine = engine
     app.state.check_limit = RateLimit(20, 60)
+    app.state.voice_limit = RateLimit(60, 60)
     app.state.link_email_limit = RateLimit(3, auth.LINK_TTL)
     app.state.link_ip_limit = RateLimit(20, 3600)
 
@@ -31,7 +32,8 @@ def create_app(settings: Settings, mailer=None, google_verify=None, engine=None)
         return {"ok": True}
 
     app.include_router(auth.router)
-    app.include_router(check_api.router)
+    for module in (check_api, voice_api, drills, progress):
+        app.include_router(module.router)
     return app
 
 
