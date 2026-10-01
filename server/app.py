@@ -1,10 +1,13 @@
 """The hosted Zwischenzug service: uvicorn server.app:app"""
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 
-from server import auth
+from server import auth, check_api
 from server.db import Db
+from server.engine import Engine
 from server.mailer import ResendMailer
 from server.ratelimit import RateLimit
 from server.settings import Settings
@@ -16,7 +19,10 @@ def create_app(settings: Settings, mailer=None, google_verify=None, engine=None)
     app.state.db = Db(settings.data_dir / "zz.db")
     app.state.mailer = mailer or ResendMailer(settings.resend_key, settings.mail_from)
     app.state.google_verify = google_verify or auth.google_verifier(settings.google_client_id)
+    if engine is None and settings.stockfish and Path(settings.stockfish).exists():
+        engine = Engine(settings.stockfish)
     app.state.engine = engine
+    app.state.check_limit = RateLimit(20, 60)
     app.state.link_email_limit = RateLimit(3, auth.LINK_TTL)
     app.state.link_ip_limit = RateLimit(20, 3600)
 
@@ -25,6 +31,7 @@ def create_app(settings: Settings, mailer=None, google_verify=None, engine=None)
         return {"ok": True}
 
     app.include_router(auth.router)
+    app.include_router(check_api.router)
     return app
 
 
