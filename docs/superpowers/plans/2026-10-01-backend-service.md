@@ -1449,3 +1449,13 @@ Report to Martin and ask before deploying. Deploy steps (run only on his go):
 - Spec coverage: auth (Task 3), voice (1, 5), check (4), drills (5), progress (5, SQLite instead of Postgres — spec note), Docker/Railway (6), secrets (6 step 5). Web/PWA/Netlify/push-to-site = Plan 2.
 - Test fixes flagged inline (Task 3 step 4 `link`, Task 4 placeholder test) are part of the steps — apply them, do not skip.
 - Names used across tasks: `create_app`, `current_user`, `owner_user`, `check_limit`, `voice_limit`, `link_email_limit`, `link_ip_limit`, `Engine`, `check_line`, `IllegalPly(index, san)`, `numbered`, `valid_label`, `save_sample(..., root=)`, `sample_stats(root)` — consistent.
+
+## As built (2026-10-01) — deviations from the steps above
+
+- PyPI name is `chess==1.11.2` (not `python-chess`); `requests==2.32.4` (2.32.3 broke snowflake-cli in the global env).
+- Fixtures are registered with `pytest_plugins = ["server_fixtures"]` in `conftest.py`; tests import only constants/helpers.
+- `scripts/voice_server.py` keeps its own `SAMPLES` and passes it as `root=` (its test monkeypatches it).
+- Engine: **depth 16, Threads 1, fresh game per call, 4 s cap** instead of 0.3 s — at 0.3 s `20.Red1` got `…Rfd8` one run, `…e6` the next. Stockfish at every depth prefers `20…e6`; the Red1 test checks repeatability, not a move.
+- "Stopped early" counts only the unbroken run of captures/checks straight after his last ply (depth 16 found an exchange 5 plies into a quiet continuation after `Red1`, which is not "the line was not over").
+- `railway.toml` at the repo root (Railway reads it there; build context is the root). whisper.cpp pinned to v1.9.1 (= local brew). Image not built locally (no Docker on the Mac) — first build happens on Railway.
+- `Settings.is_allowed("")` is False even with an empty owner.
