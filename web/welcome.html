@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zwischenzug — how it works</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#3f1a24">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --cover: #3f1a24;
+    --cover-2: #261016;
+    --paper: #f3ead8;
+    --ink: #1c1712;
+    --muted: #6b6258;
+    --stamp: #1f4a38;
+    --leak: #a61b1b;
+    --rule: rgba(142, 163, 181, .28);
+    --sq-light: #eeeed2;
+    --sq-dark: #769656;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--cover-2);
+    color: var(--ink);
+    font: 17px/1.5 var(--sans);
+    -webkit-text-size-adjust: 100%;
+  }
+  .cover {
+    background: var(--cover);
+    color: var(--paper);
+    padding: max(14px, env(safe-area-inset-top)) 20px 14px;
+    font: 500 19px/1 var(--serif);
+    letter-spacing: -.01em;
+  }
+  .sheet {
+    max-width: 560px;
+    margin: 0 auto;
+    background: var(--paper) repeating-linear-gradient(to bottom, transparent 0, transparent 31px, var(--rule) 32px);
+    padding: 22px 20px calc(40px + env(safe-area-inset-bottom));
+    min-height: 100vh;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    aspect-ratio: 1;
+    border: 3px solid var(--ink);
+    width: 100%;
+  }
+  .board div { background: var(--sq-light); display: flex; align-items: center; justify-content: center; }
+  .board div.d { background: var(--sq-dark); }
+  .board div.hit { box-shadow: inset 0 0 0 3px var(--leak); }
+  .board svg { width: 92%; height: 92%; }
+  .line {
+    margin: 14px 0 0;
+    font: 21px/1.6 var(--serif);
+    position: relative;
+  }
+  .line .ply { white-space: nowrap; }
+  .stamp {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 8px;
+    border: 2px solid var(--leak);
+    border-radius: 4px;
+    color: var(--leak);
+    font-weight: 600;
+    transform: rotate(-4deg);
+    animation: land .5s cubic-bezier(.2, 1.4, .4, 1) .6s both;
+  }
+  @keyframes land {
+    from { opacity: 0; transform: rotate(-4deg) scale(1.6); }
+    to { opacity: 1; transform: rotate(-4deg) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+  .caption { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  h1 {
+    font: 500 31px/1.15 var(--serif);
+    letter-spacing: -.02em;
+    margin: 28px 0 12px;
+  }
+  h2 {
+    font: 500 22px/1.25 var(--serif);
+    margin: 36px 0 10px;
+  }
+  p { margin: 0 0 12px; max-width: 34em; }
+  .start {
+    display: block;
+    width: 100%;
+    margin: 22px 0 6px;
+    padding: 16px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--stamp);
+    color: var(--paper);
+    font: 600 18px/1 var(--sans);
+    text-align: center;
+    text-decoration: none;
+  }
+  .start:focus-visible, a:focus-visible { outline: 3px solid var(--leak); outline-offset: 3px; }
+  ol { padding-left: 1.3em; margin: 0; }
+  ol li { margin: 0 0 10px; padding-left: 4px; }
+  ol li b { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  th { text-align: left; font-weight: 600; padding: 6px 8px 6px 0; border-bottom: 2px solid var(--ink); }
+  td { padding: 7px 8px 7px 0; border-bottom: 1px dashed rgba(28, 23, 18, .2); vertical-align: top; }
+  td:first-child { color: var(--muted); width: 34%; }
+  q { font-family: var(--serif); quotes: "“" "”"; }
+  .who { color: var(--muted); font-size: 14px; margin-top: 30px; }
+  .who a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="cover">Zwischenzug</div>
+<main class="sheet">
+  <div class="board" id="board" role="img"
+       aria-label="Position after 17.Bxf5. Black’s queen on d7 still takes back on f5."></div>
+  <p class="line" aria-label="15.Qg3 Nxf5 16.gxf5 Bxf5 17.Bxf5, and the line goes on: 17…Qxf5">
+    <span class="ply">15.Qg3 Nxf5</span> <span class="ply">16.gxf5 Bxf5</span> <span class="ply">17.Bxf5</span>
+    <span class="stamp">17…Qxf5</span>
+  </p>
+  <p class="caption">A real game. White stopped calculating at 17.Bxf5, a piece up. The queen takes back.</p>
+
+  <h1>Most lines don’t end where you stop calculating.</h1>
+  <p>Zwischenzug trains one habit: write your line all the way to the last capture. Only then does the engine show where it really ends.</p>
+  <a class="start" href="/index.html#session" data-start>Start the first position</a>
+
+  <h2>How a position goes</h2>
+  <ol>
+    <li><b>Look.</b> The board shows a position from a real game, and a question.</li>
+    <li><b>Calculate</b> without moving pieces. Take your time.</li>
+    <li><b>Say or play your line,</b> move by move, until nothing more is taken.</li>
+    <li><b>Lock it</b> by saying <q>done</q> or <q>fertig</q>. You get the key, then the engine’s answer: where your line stopped too early, or that it holds.</li>
+  </ol>
+
+  <h2>What you can say</h2>
+  <p>Tap 🎧 once and talk. Moves are heard in English or German; switch with the EN/DE button next to it.</p>
+  <table>
+    <tr><th>To</th><th>Say</th></tr>
+    <tr><td>Play a move</td><td><q>knight f5</q>, <q>queen takes f5</q>, <q>Springer f5</q>, <q>Dame schlägt f5</q></td></tr>
+    <tr><td>Take it back</td><td><q>back</q> or <q>zurück</q></td></tr>
+    <tr><td>Lock the line</td><td><q>done</q> or <q>fertig</q></td></tr>
+    <tr><td>Next position</td><td><q>next</q> or <q>weiter</q></td></tr>
+    <tr><td>Try again</td><td><q>redo</q> or <q>nochmal</q></td></tr>
+    <tr><td>Turn the board</td><td><q>flip</q> or <q>drehen</q></td></tr>
+    <tr><td>Stop listening</td><td><q>stop</q></td></tr>
+  </table>
+  <p class="caption">A move the position doesn’t allow is never written. You hear a low tone; say it again.</p>
+
+  <h2>Put it on your home screen</h2>
+  <p><b>iPhone:</b> in Safari, tap Share, then <i>Add to Home Screen</i>.<br>
+     <b>Android:</b> in Chrome, open the menu, then <i>Install app</i>.</p>
+  <p>It then opens full screen, and you stay signed in for 30 days.</p>
+  <a class="start" href="/index.html#session" data-start>Start the first position</a>
+  <p class="who" id="who"></p>
+</main>
+<script src="/pieces.js"></script>
+<script>
+(function () {
+  // Game 2 after 17.Bxf5: the line he stopped on. f5 is where the queen takes back.
+  const FEN = "r4rk1/pppq1ppp/2n5/3p1BB1/3P4/2P2PQ1/P1P4P/R4RK1";
+  const board = document.getElementById("board");
+  FEN.split("/").forEach(function (row, r) {
+    let f = 0;
+    row.split("").forEach(function (ch) {
+      if (/\d/.test(ch)) {
+        for (let i = 0; i < +ch; i++) square(r, f++, null);
+      } else square(r, f++, ch);
+    });
+  });
+  function square(r, f, ch) {
+    const el = document.createElement("div");
+    if ((r + f) % 2 === 1) el.className = "d";
+    if (r === 3 && f === 5) el.classList.add("hit");
+    if (ch) {
+      const key = (ch === ch.toUpperCase() ? "w" : "b") + ch.toUpperCase();
+      el.innerHTML = (window.CHESS_PIECES || {})[key] || "";
+    }
+    board.appendChild(el);
+  }
+  document.querySelectorAll("[data-start]").forEach(function (a) {
+    a.addEventListener("click", function () { try { localStorage.setItem("zz_welcome_seen", "1"); } catch (e) {} });
+  });
+  fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : null; }).then(function (me) {
+    if (me) document.getElementById("who").textContent = "Signed in as " + me.email + ".";
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>

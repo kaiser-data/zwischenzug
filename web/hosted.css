@@ -1,0 +1,57 @@
+/* Hosted page only (linked by scripts/build_site.py). The local file:// dossier never loads this. */
+
+/* Invitees see the board, not the owner's dossier. */
+body.zz-guest .dossier-chrome,
+body.zz-guest .tabs button:not([data-tab="session"]),
+body.zz-guest #voiceDrill { display: none !important; }
+
+.zz-dock { display: none; }
+
+@media (max-width: 720px) {
+  body { background: var(--cover-2); }
+  .wrap { margin: 0; padding: 0; max-width: none; }
+  .folder { border-radius: 0; padding: env(safe-area-inset-top) 0 0; box-shadow: none; }
+  .tabs { position: sticky; top: 0; z-index: 20; background: var(--cover); padding: 6px 8px 0; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { padding: 10px 14px 11px; font-size: 15px; }
+  .sheet { padding: 12px 10px calc(118px + env(safe-area-inset-bottom)); min-height: 100vh; }
+  body.zz-guest .tabs { display: none; }
+
+  /* Board first, edge to edge; the step strip scrolls sideways instead of wrapping into rows. */
+  #panel-session .board-frame { width: 100%; }
+  #panel-session .board { border-width: 2px; }
+  .board-steps { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+  .board-steps::-webkit-scrollbar { display: none; }
+  .board-steps button { flex: 0 0 auto; white-space: nowrap; }
+  .session-pick select { max-width: 100%; }
+  /* Question right under the board; variations and the voice drill after it. */
+  #panel-session .board-layout { display: flex; flex-direction: column; gap: 10px; }
+  #panel-session .board-frame { display: contents; }
+  #panel-session .board-frame > * { order: 1; }
+  #panel-session .session-panel { order: 2; }
+  #panel-session .voice-drill, #panel-session .variations { order: 3; }
+  #panel-session .session-panel h2 { font-size: 21px; margin: 6px 0; }
+
+  /* The thumb dock: back, forward, voice, Lock. Same buttons as before, moved here by hosted.js. */
+  body.zz-docked .zz-dock {
+    display: block;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--cover);
+    padding: 6px 10px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, .25);
+  }
+  body.zz-docked:has(#panel-session.hidden) .zz-dock { display: none; }
+  .zz-dock .voice-heard { color: #e7dcc4; font-size: 13px; min-height: 18px; margin: 0 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zz-dock-row { display: grid; grid-template-columns: 48px 48px 1fr 56px 44px 1.4fr; gap: 6px; align-items: stretch; }
+  .zz-dock .btn {
+    min-height: 52px; margin: 0; padding: 0 6px;
+    border-radius: 10px; border: 1px solid rgba(243, 234, 216, .25);
+    background: #5a2834; color: var(--paper); font-size: 18px;
+  }
+  .zz-dock .btn[aria-pressed="true"], .zz-dock .btn.on { background: var(--paper); color: var(--ink); }
+  .zz-dock #boardMic { font-size: 24px; }
+  .zz-dock #boardVoiceLang { font-size: 13px; }
+  .zz-dock #boardLock { background: var(--paper); color: var(--ink); font-weight: 600; font-size: 16px; }
+  .zz-dock #boardLock:disabled { opacity: .45; }
+  .zz-dock .btn[aria-disabled="true"] { opacity: .45; }
+}

@@ -24,7 +24,7 @@ API = "https://api-production-3edf.up.railway.app"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 FILES = ["chess.min.js", "store.js", "pieces.js", "session-board.js", "hosted.js", "session.html",
          "sessions/bundle.js"]
-WEB = ["manifest.webmanifest", "icon.svg"]
+WEB = ["manifest.webmanifest", "icon.svg", "hosted.css", "welcome.html"]
 PRIVATE = ROOT / "sessions" / "private" / "bundle.js"
 
 
@@ -38,7 +38,7 @@ def page() -> str:
                                  '<script src="/api/drills/bundle.js"></script>')
     head = ('<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#1d1b16">\n'
             '<link rel="icon" href="/icon.svg">\n<link rel="apple-touch-icon" href="/icon-192.png">\n'
-            '<meta name="apple-mobile-web-app-capable" content="yes">\n</head>')
+            '<meta name="apple-mobile-web-app-capable" content="yes">\n<link rel="stylesheet" href="/hosted.css">\n</head>')
     html = html.replace("</head>", head, 1)
     sw = "<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>\n</body>"
     return html.replace("</body>", sw, 1)
@@ -87,7 +87,7 @@ def main() -> None:
                         "--out", str(DIST / f"icon-{size}.png")], check=True, capture_output=True)
     (DIST / "index.html").write_text(page())
     (DIST / "config.js").write_text(f"window.PATH_GOOGLE_CLIENT_ID = {json.dumps(a.google_client_id)};\n")
-    version = hashlib.sha256(b"".join((DIST / f).read_bytes() for f in FILES + ["index.html", "config.js"])).hexdigest()[:12]
+    version = hashlib.sha256(b"".join((DIST / f).read_bytes() for f in FILES + WEB + ["index.html", "config.js"])).hexdigest()[:12]
     (DIST / "sw.js").write_text((ROOT / "web" / "sw.js").read_text().replace("__BUILD__", version))
     (DIST / "_redirects").write_text(f"/api/*  {a.api.rstrip('/')}/api/:splat  200\n")
     (DIST / "_headers").write_text("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: same-origin\n"

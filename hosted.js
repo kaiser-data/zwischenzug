@@ -77,11 +77,44 @@
     document.head.appendChild(script);
   }
 
+  // On a phone the most used board buttons move into a fixed thumb dock. The elements themselves
+  // move, so every listener session-board.js attached keeps working.
+  function dock() {
+    if (!window.matchMedia("(max-width: 720px)").matches || document.querySelector(".zz-dock")) return;
+    const ids = ["boardBack", "boardFwd", "boardMic", "boardListen", "boardVoiceLang", "boardLock"];
+    if (!ids.every(function (id) { return document.getElementById(id); })) return;
+    const bar = document.createElement("div");
+    bar.className = "zz-dock";
+    const heard = document.getElementById("voiceHeard");
+    if (heard) bar.appendChild(heard);
+    const row = document.createElement("div");
+    row.className = "zz-dock-row";
+    const buttons = ids.map(function (id) { return document.getElementById(id); });
+    buttons.forEach(function (el) { row.appendChild(el); });
+    buttons[buttons.length - 1].textContent = "Lock";
+    bar.appendChild(row);
+    document.body.appendChild(bar);
+    document.body.classList.add("zz-docked");
+  }
+
   function signedIn(me) {
+    document.body.classList.add(me.owner ? "zz-owner" : "zz-guest");
+    try { localStorage.setItem("zz_role", me.owner ? "owner" : "guest"); } catch (e) {}
+    let seen = null;
+    try { seen = localStorage.getItem("zz_welcome_seen"); } catch (e) {}
+    if (!seen) { location.replace("/welcome.html"); return; }
+    if (!me.owner && location.hash !== "#session") {
+      const board = document.querySelector('.tabs [data-tab="session"]');
+      if (board) board.click();
+    }
+    const sheetFoot = document.querySelector(".sheet-foot");
+    if (sheetFoot && sheetFoot.firstChild && sheetFoot.firstChild.nodeType === 3) {
+      sheetFoot.firstChild.textContent ="Progress stays on this device. Voice and the engine check run on the Zwischenzug server. ";
+    }
     const foot = document.querySelector(".sheet-foot") || document.body;
     const line = document.createElement("div");
     line.className = "zz-me";
-    line.innerHTML = "Signed in as " + me.email.replace(/</g, "&lt;") +
+    line.innerHTML = '<a href="/welcome.html">How it works</a> · Signed in as ' + me.email.replace(/</g, "&lt;") +
       (me.owner ? ' · <a href="#" id="zzInvite">invite someone</a>' : "") + ' · <a href="#" id="zzOut">sign out</a>';
     foot.appendChild(line);
     if (me.owner) document.getElementById("zzInvite").addEventListener("click", function (e) { e.preventDefault(); invitePanel(); });
@@ -136,10 +169,19 @@
 
   const params = new URLSearchParams(location.search);
   const note = params.get("login") === "expired" ? "That link was used or expired. Ask for a new one." : "";
+  // Before /me answers, assume last visit's role, so an invitee never sees the dossier flash by.
+  try { if (localStorage.getItem("zz_role") === "guest") document.documentElement.classList.add("zz-guest-early"); } catch (e) {}
+
   function start() {
-    fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (me) { if (me) signedIn(me); else gate(note); })
-      .catch(function () { gate("The server is not answering. Try again in a minute."); });
+    if (document.documentElement.classList.contains("zz-guest-early")) document.body.classList.add("zz-guest");
+    dock();
+    // Only a failed request means "server down"; a bug after sign-in must not pretend to be one.
+    fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : null; }, function () { return "offline"; })
+      .then(function (me) {
+        if (me === "offline") gate("The server is not answering. Try again in a minute.");
+        else if (me) signedIn(me);
+        else gate(note);
+      });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 
