@@ -1,6 +1,9 @@
-"""Invite-only login: an allowlisted email gets a one-time link, or signs in with Google.
-Both end in the same signed session cookie. The allowlist is checked on every request,
-so removing an email from ALLOWED_EMAILS locks that person out at once."""
+"""Invite-only login. Ways in, all ending in the same signed 30-day cookie:
+- a one-time link: printed for the owner by `python -m server.login_link` (scan it as a QR code),
+  made by the owner's Invite button for a friend, or mailed (only when RESEND_API_KEY is set);
+- Google, when GOOGLE_CLIENT_ID is set.
+Access is checked on every request: ALLOWED_EMAILS / OWNER_EMAIL from the environment, or an invite
+the owner made. Removing an email from the env list locks that person out at once."""
 from __future__ import annotations
 
 import hashlib
@@ -18,6 +21,7 @@ from server.settings import canonical
 COOKIE = "zz_session"
 MAX_AGE = 30 * 24 * 3600
 LINK_TTL = 15 * 60
+INVITE_TTL = 7 * 24 * 3600
 log = logging.getLogger("zz.auth")
 router = APIRouter(prefix="/api/auth")
 
@@ -37,13 +41,25 @@ def _session(request: Request, email: str, response):
     return response
 
 
+def allowed(request: Request, email: str) -> bool:
+    email = canonical(email)
+    return request.app.state.settings.is_allowed(email) or request.app.state.db.is_invited(email)
+
+
+def new_link(db, site_url: str, email: str, ttl: float) -> str:
+    """A one-time sign-in link for `email`, valid `ttl` seconds."""
+    token = secrets.token_urlsafe(32)
+    db.add_token(email, _hash(token), time.time() + ttl)
+    return f"{site_url}/api/auth/verify?t={token}"
+
+
 def current_user(request: Request) -> str:
     raw = request.cookies.get(COOKIE)
     try:
         email = _signer(request).loads(raw, max_age=MAX_AGE) if raw else None
     except BadSignature:
         email = None
-    if not email or not request.app.state.settings.is_allowed(email):
+    if not email or not allowed(request, email):
         raise HTTPException(401, "sign in")
     return email
 
@@ -69,10 +85,8 @@ def request_link(body: EmailIn, request: Request):
     email = canonical(body.email)
     state = request.app.state
     ip = request.client.host if request.client else "?"
-    if state.settings.is_allowed(email) and state.link_ip_limit.hit(ip) and state.link_email_limit.hit(email):
-        token = secrets.token_urlsafe(32)
-        state.db.add_token(email, _hash(token), time.time() + LINK_TTL)
-        link = f"{state.settings.site_url}/api/auth/verify?t={token}"
+    if allowed(request, email) and state.link_ip_limit.hit(ip) and state.link_email_limit.hit(email):
+        link = new_link(state.db, state.settings.site_url, email, LINK_TTL)
         try:
             state.mailer.send(email, "Zwischenzug — sign in",
                               f"Open this link to sign in (valid 15 minutes, once):\n\n{link}\n\n"
@@ -85,7 +99,7 @@ def request_link(body: EmailIn, request: Request):
 @router.get("/verify")
 def verify(t: str, request: Request):
     email = request.app.state.db.take_token(_hash(t), time.time())
-    if not email or not request.app.state.settings.is_allowed(email):
+    if not email or not allowed(request, email):
         return RedirectResponse("/?login=expired", status_code=303)
     return _session(request, email, RedirectResponse("/", status_code=303))
 
@@ -100,9 +114,21 @@ def google(body: GoogleIn, request: Request):
         raise HTTPException(401, "Google email not verified")
     email = canonical(str(claims.get("email", "")))
     settings = request.app.state.settings
-    if not settings.is_allowed(email):
+    if not allowed(request, email):
         raise HTTPException(403, "this email is not invited")
     return _session(request, email, JSONResponse({"email": email, "owner": settings.is_owner(email)}))
+
+
+@router.post("/invite")
+def invite(body: EmailIn, request: Request):
+    """Owner only: let `email` in and return a one-time link to send them (valid 7 days)."""
+    owner = owner_user(request)
+    email = canonical(body.email)
+    if "@" not in email or email.startswith("@") or email.endswith("@"):
+        raise HTTPException(400, "give an email address")
+    state = request.app.state
+    state.db.add_invite(email, owner)
+    return {"email": email, "link": new_link(state.db, state.settings.site_url, email, INVITE_TTL)}
 
 
 @router.get("/me")

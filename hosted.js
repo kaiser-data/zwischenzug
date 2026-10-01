@@ -15,7 +15,9 @@
     ".zz-card input{width:100%;box-sizing:border-box;font-size:16px;padding:12px;border:1px solid #c9c2b2;border-radius:8px}" +
     ".zz-card button{width:100%;margin-top:10px;font-size:16px;padding:12px;border-radius:8px;border:0;" +
     "background:#1d1b16;color:#fbf8f1;cursor:pointer}.zz-msg{margin-top:12px;font-size:14px;min-height:1em}" +
-    ".zz-google{display:flex;justify-content:center;min-height:44px}.zz-me{font-size:12px;color:#7a7466;margin-top:6px}.zz-me a{color:inherit}" +
+    ".zz-google{display:flex;justify-content:center;min-height:44px}.zz-qr{display:flex;justify-content:center;margin-top:14px}" +
+    ".zz-close{background:transparent!important;color:inherit!important;border:1px solid #c9c2b2!important}" +
+    ".zz-msg a{color:inherit}.zz-me{font-size:12px;color:#7a7466;margin-top:6px}.zz-me a{color:inherit}" +
     ".zz-check{margin-top:10px;padding:10px 12px;border-left:3px solid #8a6d2b;background:rgba(138,109,43,.08)}" +
     ".zz-check b{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#8a6d2b}";
   document.head.appendChild(css);
@@ -26,14 +28,18 @@
     const google = window.PATH_GOOGLE_CLIENT_ID;
     box.innerHTML = '<form class="zz-card"><h2>Zwischenzug</h2>' + (google
       ? '<p>Invite only. Sign in with the Google account you were invited with.</p><div class="zz-google"></div>'
-      : '<p>Invite only. Enter your email and open the link we send you.</p>' +
-        '<input type="email" required autocomplete="email" placeholder="you@example.com">' +
-        '<button type="submit">Send sign-in link</button>') + '<div class="zz-msg"></div></form>';
+      : window.PATH_MAIL_LOGIN
+        ? '<p>Invite only. Enter your email and open the link we send you.</p>' +
+          '<input type="email" required autocomplete="email" placeholder="you@example.com">' +
+          '<button type="submit">Send sign-in link</button>'
+        : '<p>Invite only. Scan your invite QR code or open your invite link — one tap and this device stays signed in for 30 days.</p>') +
+      '<div class="zz-msg"></div></form>';
     const form = box.querySelector("form");
     const msg = box.querySelector(".zz-msg");
     msg.textContent = note || "";
     document.body.appendChild(box);
     if (google) { googleButton(box.querySelector(".zz-google"), msg, google); return; }
+    if (!window.PATH_MAIL_LOGIN) return;
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       const email = form.querySelector("input").value.trim();
@@ -75,12 +81,57 @@
     const foot = document.querySelector(".sheet-foot") || document.body;
     const line = document.createElement("div");
     line.className = "zz-me";
-    line.innerHTML = "Signed in as " + me.email.replace(/</g, "&lt;") + ' · <a href="#" id="zzOut">sign out</a>';
+    line.innerHTML = "Signed in as " + me.email.replace(/</g, "&lt;") +
+      (me.owner ? ' · <a href="#" id="zzInvite">invite someone</a>' : "") + ' · <a href="#" id="zzOut">sign out</a>';
     foot.appendChild(line);
+    if (me.owner) document.getElementById("zzInvite").addEventListener("click", function (e) { e.preventDefault(); invitePanel(); });
     document.getElementById("zzOut").addEventListener("click", function (e) {
       e.preventDefault();
       fetch("/api/auth/logout", { method: "POST" }).then(function () { location.href = "/"; });
     });
+  }
+
+  // Owner: one invite per person — their own one-time link, shown as a QR code to scan or a link to send.
+  function invitePanel() {
+    const box = document.createElement("div");
+    box.className = "zz-gate";
+    box.innerHTML = '<form class="zz-card"><h2>Invite</h2><p>Each person gets their own one-time link (valid 7 days).</p>' +
+      '<input type="email" required placeholder="their@email.com"><button type="submit">Create invite</button>' +
+      '<div class="zz-qr"></div><div class="zz-msg"></div><button type="button" class="zz-close">Close</button></form>';
+    document.body.appendChild(box);
+    const form = box.querySelector("form");
+    const msg = box.querySelector(".zz-msg");
+    const qr = box.querySelector(".zz-qr");
+    box.querySelector(".zz-close").addEventListener("click", function () { box.remove(); });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      msg.textContent = "Creating…";
+      fetch("/api/auth/invite", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.querySelector("input").value.trim() }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || r.status); return j; }); })
+        .then(function (j) {
+          qr.innerHTML = "";
+          drawQr(qr, j.link);
+          msg.innerHTML = "For " + j.email.replace(/</g, "&lt;") + ': scan it, or <a href="#" class="zz-share">send the link</a>.';
+          msg.querySelector(".zz-share").addEventListener("click", function (ev) {
+            ev.preventDefault();
+            const text = "Zwischenzug — your sign-in link (once, 7 days): " + j.link;
+            if (navigator.share) navigator.share({ title: "Zwischenzug", text: text }).catch(function () {});
+            else navigator.clipboard.writeText(j.link).then(function () { msg.textContent = "Link copied."; });
+          });
+        })
+        .catch(function (err) { msg.textContent = "Could not create the invite: " + err.message; });
+    });
+  }
+
+  function drawQr(host, text) {
+    function draw() { new QRCode(host, { text: text, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M }); }
+    if (window.QRCode) { draw(); return; }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+    script.onload = draw;
+    script.onerror = function () { host.textContent = text; };
+    document.head.appendChild(script);
   }
 
   const params = new URLSearchParams(location.search);

@@ -73,3 +73,36 @@ def test_google_login_with_googlemail_spelling(client, settings):
     r = client.post("/api/auth/google", json={"credential": "ok:M@gmail.com"})
     assert r.json() == {"email": "m@gmail.com", "owner": True}
     assert client.get("/api/drills/bundle.js").status_code == 404
+
+
+def test_owner_invites_a_friend_by_link(client, mailer):
+    client.post("/api/auth/google", json={"credential": "ok:" + FRIEND})
+    assert client.post("/api/auth/invite", json={"email": "new@x.de"}).status_code == 403
+    client.cookies.clear()
+    assert client.post("/api/auth/invite", json={"email": "new@x.de"}).status_code == 401
+    client.post("/api/auth/google", json={"credential": "ok:" + OWNER})
+    assert client.post("/api/auth/invite", json={"email": "nonsense"}).status_code == 400
+    link = client.post("/api/auth/invite", json={"email": "New@x.de"}).json()["link"]
+    assert link.startswith("https://zz.test/api/auth/verify?t=")
+    client.cookies.clear()
+    r = client.get(link.replace("https://zz.test", ""), follow_redirects=False)
+    assert r.headers["location"] == "/"
+    assert client.get("/api/auth/me").json() == {"email": "new@x.de", "owner": False}
+    assert client.get("/api/drills/bundle.js").status_code == 403
+
+
+def test_login_link_script(settings, monkeypatch, capsys):
+    import sys
+
+    from server import login_link
+    monkeypatch.setenv("ZZ_DATA", str(settings.data_dir))
+    monkeypatch.setenv("SESSION_SECRET", "k" * 40)
+    monkeypatch.setenv("OWNER_EMAIL", OWNER)
+    monkeypatch.setenv("SITE_URL", "https://zz.test")
+    monkeypatch.setattr(sys, "argv", ["login_link", OWNER])
+    login_link.main()
+    assert capsys.readouterr().out.startswith("https://zz.test/api/auth/verify?t=")
+    monkeypatch.setattr(sys, "argv", ["login_link", STRANGER])
+    import pytest
+    with pytest.raises(SystemExit):
+        login_link.main()

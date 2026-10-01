@@ -11,6 +11,7 @@ SCHEMA = """
 create table if not exists users (email text primary key, created real not null, last_login real not null);
 create table if not exists login_tokens (hash text primary key, email text not null, created real not null,
                                          expires real not null, used integer not null default 0);
+create table if not exists invites (email text primary key, invited_by text not null, created real not null);
 create table if not exists progress (email text primary key, state text not null, updated real not null);
 """
 
@@ -30,6 +31,12 @@ class Db:
         now = time.time()
         self._run("insert into users values (?, ?, ?) on conflict(email) do update set last_login = ?",
                   (email, now, now, now))
+
+    def add_invite(self, email: str, invited_by: str) -> None:
+        self._run("insert into invites values (?, ?, ?) on conflict(email) do nothing", (email, invited_by, time.time()))
+
+    def is_invited(self, email: str) -> bool:
+        return bool(self._run("select 1 from invites where email = ?", (email,)))
 
     def add_token(self, email: str, token_hash: str, expires: float) -> None:
         self._run("insert into login_tokens (hash, email, created, expires) values (?, ?, ?, ?)",
