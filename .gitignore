@@ -16,3 +16,5 @@ dist/
 
 # Local Netlify folder
 .netlify
+# Invite pages: one-time sign-in links (scripts/invite.py)
+invites/

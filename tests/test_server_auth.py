@@ -106,3 +106,8 @@ def test_login_link_script(settings, monkeypatch, capsys):
     import pytest
     with pytest.raises(SystemExit):
         login_link.main()
+    monkeypatch.setattr(sys, "argv", ["login_link", "--invite", STRANGER])
+    login_link.main()
+    assert capsys.readouterr().out.startswith("https://zz.test/api/auth/verify?t=")
+    monkeypatch.setattr(sys, "argv", ["login_link", STRANGER])
+    login_link.main()                    # now invited: a plain link works too
