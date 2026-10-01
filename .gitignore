@@ -11,3 +11,8 @@ books/
 sessions/private/
 # Local knowledge graph output (graphify); regenerate with `graphify update .`
 graphify-out/
+# Built hosted site (scripts/build_site.py)
+dist/
+
+# Local Netlify folder
+.netlify

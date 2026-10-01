@@ -398,7 +398,7 @@
     long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
     undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
-    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1 },
+    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
     skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, naechster: 1, naechste: 1 },
     prev: { previous: 1, vorher: 1, vorige: 1, voriger: 1, "vorheriger": 1 },
@@ -1223,6 +1223,10 @@
     const key = document.getElementById("boardKey");
     key.innerHTML = (s.branches || []).map(function (b) { return b.key || ""; }).join("") + (s.key || "");
     key.classList.add("show");
+    // A host page (hosted.js) may add an engine check of the locked line — only ever after Lock.
+    if (typeof window.PATH_AFTER_LOCK === "function") {
+      window.PATH_AFTER_LOCK({ fen: s.fen, line: game.history(), key: key, listening: listen.on, lang: voiceLang() });
+    }
     document.getElementById("boardLock").disabled = true;
     document.getElementById("boardRedo").classList.remove("hidden");
     document.getElementById("boardNext").disabled = step >= steps().length - 1;
