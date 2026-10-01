@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
+pytest_plugins = ["server_fixtures"]
 
 
 @pytest.fixture(scope="session")
