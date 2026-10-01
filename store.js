@@ -63,6 +63,92 @@
     };
   }
 
+  // Two copies of the same state, e.g. phone and Mac: arrays are joined without duplicates,
+  // objects are merged key by key, and where both have a plain value `mine` wins.
+  function mergeStates(theirs, mine) {
+    if (Array.isArray(theirs) && Array.isArray(mine)) {
+      const seen = {};
+      return theirs.concat(mine).filter(function (item) {
+        const k = JSON.stringify(item);
+        if (seen[k]) { return false; }
+        seen[k] = true;
+        return true;
+      });
+    }
+    if (isPlainObject(theirs) && isPlainObject(mine)) {
+      const out = Object.assign({}, theirs);
+      Object.keys(mine).forEach(function (k) {
+        out[k] = Object.prototype.hasOwnProperty.call(theirs, k) ? mergeStates(theirs[k], mine[k]) : mine[k];
+      });
+      return out;
+    }
+    return mine === undefined ? theirs : mine;
+  }
+
+  // Hosted: localStorage first (works offline, nothing waits on the network), then the
+  // server copy at `url` (GET/PUT {state, base}). A 409 means another device wrote in
+  // between: merge its state with ours and send once more.
+  function remoteBackend(key, url) {
+    const local = localBackend(key);
+    let updated = null;
+    let sending = Promise.resolve();
+    let queued = null;
+
+    function put(state) {
+      return fetch(url, { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: state, base: updated }) })
+        .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); });
+    }
+
+    function push(state) {
+      return put(state).then(function (res) {
+        if (res.status === 409) {
+          const merged = mergeStates(res.body.state || {}, state);
+          updated = res.body.updated;
+          local.write(merged);
+          return put(merged).then(function (again) {
+            if (again.status === 200) { updated = again.body.updated; }
+            return again.status === 200;
+          });
+        }
+        if (res.status === 200) { updated = res.body.updated; }
+        return res.status === 200;
+      }, function () { return false; });
+    }
+
+    return {
+      name: "remote",
+      read: function () {
+        const mine = local.read();
+        return fetch(url, { credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (row) {
+            if (!row) { return mine; }
+            updated = row.updated;
+            if (!row.state) { return mine; }
+            const merged = mergeStates(row.state, mine);
+            local.write(merged);
+            return merged;
+          }, function () { return mine; });
+      },
+      write: function (state) {
+        const ok = local.write(state);
+        // One request at a time; a burst of commits sends only the newest state.
+        const first = queued === null;
+        queued = JSON.parse(JSON.stringify(state));
+        if (first) {
+          sending = sending.then(function () {
+            const next = queued;
+            queued = null;
+            return push(next);
+          });
+        }
+        return ok;
+      },
+      synced: function () { return sending; }
+    };
+  }
+
   // `backend` is { name, read() -> state|Promise<state>, write(state) -> bool|Promise<bool> }.
   function create(backend) {
     let state = blank();
@@ -87,7 +173,8 @@
         });
         return pending;
       },
-      settled: function () { return pending || Promise.resolve(true); }
+      settled: function () { return pending || Promise.resolve(true); },
+      synced: function () { return backend.synced ? backend.synced() : Promise.resolve(true); }
     };
   }
 
@@ -95,6 +182,8 @@
     KEY: KEY,
     blank: blank,
     create: create,
-    local: function (key) { return create(localBackend(key || KEY)); }
+    merge: mergeStates,
+    local: function (key) { return create(localBackend(key || KEY)); },
+    remote: function (key, url) { return create(remoteBackend(key || KEY, url || "/api/progress")); }
   };
 })();

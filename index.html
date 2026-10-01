@@ -669,7 +669,8 @@
     return x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0");
   }
   // One store for the whole page; the backend is swappable, the call sites are not.
-  const store = window.PathStore.local(KEY);
+  // hosted.js sets PATH_REMOTE_STORE on https; file:// keeps today's localStorage-only store.
+  const store = window.PATH_REMOTE_STORE ? window.PathStore.remote(KEY) : window.PathStore.local(KEY);
   window.pathStore = store;
   // Deliberate compatibility shim: the eleven existing call sites pass `state` or `s`,
   // which is already the store's own object, so the argument is ignored rather than

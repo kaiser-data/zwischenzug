@@ -4,6 +4,7 @@
   if (location.protocol !== "https:") return;
 
   window.PATH_VOICE_URL = "/api/voice";
+  window.PATH_REMOTE_STORE = true;
 
   const css = document.createElement("style");
   css.textContent =
