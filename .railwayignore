@@ -1,0 +1,7 @@
+# Only server/ goes into the image; never upload book content to the builder.
+books/
+sessions/
+graphify-out/
+tests/
+docs/
+.superpowers/
