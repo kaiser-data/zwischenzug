@@ -1,7 +1,7 @@
 # Claude — proceed from here
 
 You are continuing **Zwischenzug** (`kaiser-data/zwischenzug`, **public repo**).
-Do **not** restart. Do **not** rename. Do **not** build a chess site.
+Do **not** restart. Do **not** rename. Hosted for him + invitees since 2026-10-01 (HANDOFF §3 "Hosted") — still not a public chess site.
 
 **Read `HANDOFF.md` first** — full state, schema, workflows, verification (2026-09-13).
 
@@ -26,9 +26,9 @@ His words — use them, don't replace them:
 - Hard blitz cap 0–3/day. Never train blitz; never author a blitz game as a session.
 - Train first, crush later. No tournament calendar.
 - Compose Lichess / Chessable / ChessTempo / Aagaard. No puzzle engine.
-- **No Stockfish in the browser.** Author offline (`/opt/homebrew/bin/stockfish`). The Lichess analysis link opens only after Lock.
-- `file://` must work. Sessions are bundled JS, not `fetch()`.
-- **Public repo:** `books/` and `sessions/private/` are gitignored. Book positions, solutions, diagrams and text never go into tracked files. Check the diff before every commit.
+- **No Stockfish in the browser.** Author offline (`/opt/homebrew/bin/stockfish`). The hosted server's `/api/check` runs only after Lock and answers in sentences. The Lichess analysis link opens only after Lock.
+- `file://` must work. Sessions are bundled JS, not `fetch()`. Hosted extras live in `hosted.js` / `web/` / `server/` and act only on https.
+- **Public repo:** `books/` and `sessions/private/` are gitignored. Book positions, solutions, diagrams and text never go into tracked files or onto Netlify (`build_site.py` refuses). Check the diff before every commit.
 - Keys are teaching sentences, never raw eval.
 - `session-board.js` stays generic: a new game = new JSON + `python3 scripts/bundle_sessions.py`. Verify every line with python-chess.
 - Commit only when he says **go** / **push**.
@@ -42,4 +42,4 @@ His words — use them, don't replace them:
 
 ## Not yet
 
-Crush / calendar · new piece set, chrome, README restyle · Puzzle Storm / ChessTempo clone · Stockfish WASM · old 10+0 games as sessions.
+Crush / calendar · new piece set, README restyle · Puzzle Storm / ChessTempo clone · Stockfish WASM · old 10+0 games as sessions.
