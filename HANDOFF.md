@@ -196,7 +196,7 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
 
 ## 8. Next (in order)
 
-00. **Hosted follow-ups:** he tests mic + dock + sync on the iPhone; **exercises by Elo + a training plan for invitees** (his request 2026-10-01, not designed yet — proposal: rated Lichess puzzles, CC0, written to the last capture); Voice v2 should land in `server/voicecore.py` so both servers get it.
+00. **Hosted follow-ups:** he tests mic + dock + sync on the iPhone; **training by level** is built (2026-10-01): `scripts/build_puzzles.py` → `sessions/puzzles.js` (684 Lichess puzzles, CC0, ≥ 5-ply lines, 1000–2800), `training.js` builds "Today · 3 positions near <level>" (group Training, `solve` steps, state in `state.training`, synced); right first try +40, miss −40; invitees land on it from the welcome page. Ideas next: more per day, weekly review of misses; Voice v2 should land in `server/voicecore.py` so both servers get it.
 0. **Build Voice v2** (§3 "Voice v2", steps 1–4) — his open request from 2026-09-28. Eval on his samples before and after; report accuracy and latency with numbers.
 1. **Read his results** from Aagaard 6.1–6.6 (Log → Aagaard log; Drills tab shows open / solved / again) and his voice experience: what was misheard, whether the tones and "say it again" worked, whether pauses cut moves right (`LISTEN.SILENCE_MS` 700 ms is the knob). Ask the exact voice-drill score.
 1b. After every finished feature: report unpushed commits and ask "push?" — he checks GitHub (2026-09-28: "seit gestern keine commits auf github").

@@ -1224,9 +1224,11 @@
     key.innerHTML = (s.branches || []).map(function (b) { return b.key || ""; }).join("") + (s.key || "");
     key.classList.add("show");
     // A host page (hosted.js) may add an engine check of the locked line — only ever after Lock.
-    if (typeof window.PATH_AFTER_LOCK === "function") {
-      window.PATH_AFTER_LOCK({ fen: s.fen, line: game.history(), key: key, listening: listen.on, lang: voiceLang() });
-    }
+    // Listeners (training.js) hear which step locked and whether it was right on the first try.
+    const lockInfo = { sessionId: session && session.id, stepId: stepId(step), clean: !firstMiss,
+      fen: s.fen, line: game.history(), key: key, listening: listen.on, lang: voiceLang() };
+    if (typeof window.PATH_AFTER_LOCK === "function") window.PATH_AFTER_LOCK(lockInfo);
+    document.dispatchEvent(new CustomEvent("path:locked", { detail: lockInfo }));
     document.getElementById("boardLock").disabled = true;
     document.getElementById("boardRedo").classList.remove("hidden");
     document.getElementById("boardNext").disabled = step >= steps().length - 1;

@@ -23,7 +23,7 @@ API = "https://api-production-3edf.up.railway.app"
 # Public by design (it is in every Google sign-in page); set GOOGLE_CLIENT_ID or pass --google-client-id.
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 FILES = ["chess.min.js", "store.js", "pieces.js", "session-board.js", "hosted.js", "session.html",
-         "sessions/bundle.js"]
+         "sessions/bundle.js", "sessions/puzzles.js", "training.js"]
 WEB = ["manifest.webmanifest", "icon.svg", "hosted.css", "welcome.html"]
 PRIVATE = ROOT / "sessions" / "private" / "bundle.js"
 

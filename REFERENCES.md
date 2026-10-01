@@ -73,3 +73,7 @@ Roles assigned from comparison roundups (Be Good at Chess, Chessiverse / IM John
 **Used in:** `session.html` only, to legalise clicks. Not used as an engine.
 
 **What is NOT taken.** Any evaluation or opening book.
+
+## Training positions
+
+- Lichess puzzle database, https://database.lichess.org/#puzzles — CC0. `scripts/build_puzzles.py` picks the long-line puzzles into `sessions/puzzles.js` (id, rating, position after the first move, solution in SAN).

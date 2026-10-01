@@ -340,6 +340,7 @@
   }
   .branch.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .branch.done { border-color: var(--stamp); color: var(--stamp); }
+  .training-level { margin: 0 0 8px; }
 </style>
 </head>
 <body>
@@ -627,6 +628,8 @@
 <script src="store.js"></script>
 <script src="pieces.js"></script>
 <script src="sessions/bundle.js"></script>
+<script src="sessions/puzzles.js"></script>
+<script src="training.js"></script>
 <script src="sessions/private/bundle.js"></script>
 <script src="session-board.js"></script>
 <script>
@@ -1036,6 +1039,7 @@
   });
 
   store.hydrate().then(function () {
+    if (window.PathTraining) window.PathTraining.prepare(store);
     render();
     const boot = location.hash.replace("#", "");
     if (boot) showTab(boot);
