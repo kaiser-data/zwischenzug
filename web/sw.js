@@ -1,6 +1,6 @@
 // Offline shell: the board, the public sessions and the scripts. /api is never cached.
 const VERSION = "__BUILD__";
-const SHELL = ["/", "/index.html", "/chess.min.js", "/store.js", "/pieces.js", "/hosted.js",
+const SHELL = ["/", "/index.html", "/chess.min.js", "/store.js", "/pieces.js", "/config.js", "/hosted.js",
   "/session-board.js", "/sessions/bundle.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", function (e) {

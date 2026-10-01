@@ -7,8 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def canonical(email: str) -> str:
+    """Lowercase, and googlemail.com = gmail.com (old German Google accounts sign in as either)."""
+    email = email.strip().lower()
+    return email[: -len("@googlemail.com")] + "@gmail.com" if email.endswith("@googlemail.com") else email
+
+
 def _emails(raw: str) -> frozenset[str]:
-    return frozenset(e.strip().lower() for e in raw.split(",") if e.strip())
+    return frozenset(canonical(e) for e in raw.split(",") if e.strip())
 
 
 @dataclass(frozen=True)
@@ -25,8 +31,11 @@ class Settings:
     secure_cookie: bool = True
 
     def is_allowed(self, email: str) -> bool:
-        email = email.strip().lower()
-        return bool(email) and (email == self.owner or email in self.allowed)
+        email = canonical(email)
+        return bool(email) and (email == canonical(self.owner) or email in self.allowed)
+
+    def is_owner(self, email: str) -> bool:
+        return bool(self.owner) and canonical(email) == canonical(self.owner)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -38,7 +47,7 @@ class Settings:
         return cls(
             data_dir=data,
             allowed=_emails(os.environ.get("ALLOWED_EMAILS", "")),
-            owner=os.environ.get("OWNER_EMAIL", "").strip().lower(),
+            owner=canonical(os.environ.get("OWNER_EMAIL", "")),
             secret=secret,
             site_url=os.environ.get("SITE_URL", "").rstrip("/"),
             google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),

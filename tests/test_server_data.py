@@ -18,6 +18,21 @@ def test_settings_from_env(monkeypatch, tmp_path):
     assert not s.is_allowed("")
 
 
+def test_googlemail_and_gmail_are_one_address(tmp_path):
+    s = Settings(data_dir=tmp_path, allowed=frozenset({"f@gmail.com"}), owner="m@gmail.com", secret="k" * 40,
+                 site_url="")
+    assert s.is_allowed("M@googlemail.com") and s.is_owner("m@googlemail.com") and s.is_owner("m@gmail.com")
+    assert s.is_allowed("f@googlemail.com") and not s.is_owner("f@gmail.com")
+
+
+def test_owner_from_env_is_canonical(monkeypatch, tmp_path):
+    monkeypatch.setenv("ZZ_DATA", str(tmp_path))
+    monkeypatch.setenv("SESSION_SECRET", "s" * 32)
+    monkeypatch.setenv("OWNER_EMAIL", "Martin@GoogleMail.com")
+    s = Settings.from_env()
+    assert s.owner == "martin@gmail.com" and s.is_owner("martin@googlemail.com")
+
+
 def test_short_secret_refuses_to_start(monkeypatch, tmp_path):
     monkeypatch.setenv("ZZ_DATA", str(tmp_path))
     monkeypatch.setenv("SESSION_SECRET", "short")

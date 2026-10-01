@@ -66,3 +66,10 @@ def test_logout(client, mailer):
     login(client, mailer, FRIEND)
     client.post("/api/auth/logout")
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_google_login_with_googlemail_spelling(client, settings):
+    client.app.state.settings = replace(settings, owner="m@googlemail.com")
+    r = client.post("/api/auth/google", json={"credential": "ok:M@gmail.com"})
+    assert r.json() == {"email": "m@gmail.com", "owner": True}
+    assert client.get("/api/drills/bundle.js").status_code == 404

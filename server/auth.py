@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel
 
+from server.settings import canonical
+
 COOKIE = "zz_session"
 MAX_AGE = 30 * 24 * 3600
 LINK_TTL = 15 * 60
@@ -48,7 +50,7 @@ def current_user(request: Request) -> str:
 
 def owner_user(request: Request) -> str:
     email = current_user(request)
-    if email != request.app.state.settings.owner:
+    if not request.app.state.settings.is_owner(email):
         raise HTTPException(403, "owner only")
     return email
 
@@ -64,7 +66,7 @@ class GoogleIn(BaseModel):
 @router.post("/request")
 def request_link(body: EmailIn, request: Request):
     # Same reply for every address, so the page cannot be used to probe who is invited.
-    email = body.email.strip().lower()
+    email = canonical(body.email)
     state = request.app.state
     ip = request.client.host if request.client else "?"
     if state.settings.is_allowed(email) and state.link_ip_limit.hit(ip) and state.link_email_limit.hit(email):
@@ -96,17 +98,17 @@ def google(body: GoogleIn, request: Request):
         raise HTTPException(401, "Google sign-in failed")
     if not claims.get("email_verified"):
         raise HTTPException(401, "Google email not verified")
-    email = str(claims.get("email", "")).strip().lower()
+    email = canonical(str(claims.get("email", "")))
     settings = request.app.state.settings
     if not settings.is_allowed(email):
         raise HTTPException(403, "this email is not invited")
-    return _session(request, email, JSONResponse({"email": email, "owner": email == settings.owner}))
+    return _session(request, email, JSONResponse({"email": email, "owner": settings.is_owner(email)}))
 
 
 @router.get("/me")
 def me(request: Request):
     email = current_user(request)
-    return {"email": email, "owner": email == request.app.state.settings.owner}
+    return {"email": email, "owner": request.app.state.settings.is_owner(email)}
 
 
 @router.post("/logout")
