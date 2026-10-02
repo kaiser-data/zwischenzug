@@ -1,11 +1,11 @@
 # Handoff — Zwischenzug
 
-Date: 2026-10-01
+Date: 2026-10-02
 Repo: https://github.com/kaiser-data/zwischenzug (**public**)
 Workspace: `/Users/marty/grok_projects/chess_path_to`
 Open: `open index.html` → **Board** or **Drills** tab · hosted: **https://zwischenzug.netlify.app**
 
-This replaces the 2026-09-21 handoff (voice sections in §3 added 2026-09-27/28, hosted version 2026-10-01). The dossier exists and trains calculation. Do not restart or rename. Hosting it for him and a few invited players was his request on 2026-10-01; it is not a public chess site.
+This replaces the 2026-09-21 handoff (voice sections in §3 added 2026-09-27/28, hosted version + training by level + invites 2026-10-01). The dossier exists and trains calculation. Do not restart or rename. Hosting it for him and a few invited players was his request on 2026-10-01; it is not a public chess site.
 
 ---
 
@@ -13,10 +13,10 @@ This replaces the 2026-09-21 handoff (voice sections in §3 added 2026-09-27/28,
 
 | | |
 |---|---|
-| Last pushed commit | `18a4743` on branch `hosted/dossier-split` (2026-09-28, voice hands-free + error handling). Branch = origin, nothing unpushed. `main` unchanged at `f6c4a77`, 25+ commits behind — merge only when he asks |
 | **Voice** | Done 2026-09-27/28 (§3): push-to-talk 🎤, hands-free 🎧 remembered across reloads, grammar second pass, spoken navigation (weiter / vorher / nochmal / drehen / fertig / stop), misheard moves refused with a tone and never written, sequences kept as far as legal, ambiguity named, voice drill + opt-in samples. Server: `python3 scripts/voice_server.py` (127.0.0.1:8766). Not yet tested by him on his real voice after the error-handling change. **Voice v2 requested 2026-09-28** (faster, stabler, short commands, nearest legal move, two-rook letter) — measured and planned, not built (§3 "Voice v2") |
-| Last pushed commit | `667317b` on `hosted/dossier-split` (2026-10-01, hosted version + progress sync). `main` unchanged at `f6c4a77` — merge only when he asks |
-| **Hosted (2026-10-01)** | **https://zwischenzug.netlify.app** (Netlify site `zwischenzug`, team kaiser-data) → `/api/*` proxied same-origin to Railway project `zwischenzug`, service `api`, **https://api-production-3edf.up.railway.app**, volume `/data` (SQLite `zz.db`, speech models, samples per user, `private/bundle.js`). §3 "Hosted". Works on his iPhone (sign-in confirmed by him). Not yet confirmed on the phone: mic, thumb dock, sync |
+| Last pushed commit | `4cdffe8` on `hosted/dossier-split` (2026-10-01, invite QR pages). **Uncommitted:** `training.js` (3/5/10 a day + misses come back after 2 days, not yet tested) and two new tests appended to `tests/test_training.py` (count, misses come back) — written, never run; see §8 item 00a. `main` unchanged at `f6c4a77` — merge only when he asks |
+| **Hosted (2026-10-01)** | **https://zwischenzug.netlify.app** (Netlify site `zwischenzug`, team kaiser-data) → `/api/*` proxied same-origin to Railway project `zwischenzug`, service `api`, **https://api-production-3edf.up.railway.app**, volume `/data` (SQLite `zz.db`, speech models, samples per user, `private/bundle.js`). §3 "Hosted". Works on his iPhone (sign-in confirmed by him, "works nice"). Not yet confirmed on the phone: mic (EN and DE), thumb dock, sync, Training. Test invitee `test1@zwischenzug.test` invited 2026-10-01 (link on his Mac in `invites/`, unused) |
+| **Training by level** | Live 2026-10-01: `sessions/puzzles.js` (684 Lichess puzzles, CC0, built by `scripts/build_puzzles.py` from `~/.cache/zwischenzug/puzzles/lichess_db_puzzle.csv.zst`) → `training.js` makes "Today · 3 positions near <level>" (group Training, `solve` steps, `state.training` {level, days, done}, synced). Right on the first try +40, a miss −40 (800–2800). Rating set once above the board. Invitees land on it |
 | **Board navigation** | Done 2026-09-21: clickable steps, progress across reloads, Redo, board orientation. Spec + plan in `docs/superpowers/` |
 | Sessions in the repo | `JB2bQpWt` (game 1, won), `XbhWoWMi` (game 2, lost), `qVxKt9G0` (game 3, simul vs GM Rabiega 2026-09-19, drawn) — all three `category: leak`; `6yfxgu80` (game 4, classical OTB 2026-09-27 in Oweide vs Torsten Hannebauer, won in 20, `category: clean`) |
 | **Game categories** | Added 2026-09-27: every game session carries `category` (§4); the category decides the follow-up (§5A step 3b). Shown above the board and in the picker's optgroups ("Games · Clean") |
@@ -85,7 +85,11 @@ One file app: `index.html` + `session-board.js` + `pieces.js` (CBurnett) + `ches
   4. *Eval before/after*: replay his 20 samples in real session positions (all FENs from `sessions/**/*.json` where the label is legal; script drafted as `~/.cache/zwischenzug/voice/dev/collect.py`, not yet run — he interrupted it) → free vs grammar vs new matcher accuracy + ms. Synthesize command words with `say` to see what the chess model writes for "no", "undo", "back", "nein" (it is trained on moves only — check before trusting a command word). Then pytest, `graphify update .`, HANDOFF.
 - **Hosted (2026-10-01).** Spec `docs/superpowers/specs/2026-10-01-mobile-pwa-voice-design.md`, plan + as-built notes `docs/superpowers/plans/2026-10-01-backend-service.md`.
   *Backend* `server/` (FastAPI, one process): `voicecore.py` (shared with `scripts/voice_server.py`, which still runs locally on 8766), `auth.py` (invite-only: one-time links, owner `/api/auth/invite`, optional mail via Resend and Google — both off: no `RESEND_API_KEY` / `GOOGLE_CLIENT_ID`), `engine.py` + `/api/check` (Stockfish depth 16, Threads 1, fresh game per call → same line, same sentence; "stopped early" = the unbroken capture/check run right after his last ply swings material ≥ 2), `drills.py` (owner only), `progress.py` (409 on stale base). Railway env: `SESSION_SECRET` (generated into Railway, never shown), `OWNER_EMAIL=martinkaiser.bln@googlemail.com` (googlemail = gmail everywhere), `SITE_URL`, `MAIL_FROM`, `RAILWAY_DOCKERFILE_PATH=server/Dockerfile` (without it Railway ignored the Dockerfile and served index.html via Caddy). `.railwayignore` keeps books/, sessions/, tests/ out of the upload. Deploy: `railway up --detach` from the repo root. Measured on Railway: voice ~420 ms (grammar ~640 ms), check 0.2–0.3 s.
-  *Sign-in:* he gets a link with `railway ssh -- python -m server.login_link <email>` (15 min, once) → show as QR (`uv run --with "qrcode[pil]"`). Invitees: signed-in owner → footer "invite someone" → own one-time link/QR per person (7 days). Cookie `zz_session` 30 days.
+  *Sign-in and invites (no mail, no Google — both are coded but off):* one-time links only; the server keeps a sha256, so a link can never be shown twice — always make a new one. Cookie `zz_session` 30 days.
+  - **Workflow:** `python3 scripts/invite.py anna@x.de bert@y.org` → per person `railway ssh -- python -m server.login_link --invite <email>` (adds to `invites` table, link valid 7 days) → local page `invites/invites-<stamp>.html` (gitignored: links are keys) with one QR + "Copy link" / "Share" per person, opened in the browser, printable. `--me` = a 15-minute link for the owner. A new device or lost link: run it again for the same email; progress stays (keyed by email).
+  - On the phone: signed-in owner → footer "invite someone" → same thing (`POST /api/auth/invite`, owner only), QR drawn with qrcodejs from cdnjs.
+  - Access = `OWNER_EMAIL` / `ALLOWED_EMAILS` env **or** a row in `invites`. There is **no revoke yet** (proposed: `invite.py --remove` deleting the row; the cookie then fails on the next request because access is checked every time).
+  - First visit: `/welcome.html` (once, `localStorage` `zz_welcome_seen`), then Today. Invitees (`zz_role` guest) see only the Board tab; no dossier, no voice drill.
   *Site:* `python3 scripts/build_site.py && netlify deploy --prod --dir dist --site f13fe0d3-4e74-4efb-8071-6da1baf24a78 --no-build`. The build copies public files + `web/` (manifest, `sw.js` offline shell, `hosted.css`, `welcome.html`, icon), swaps the private bundle tag for `/api/drills/bundle.js`, and **refuses** if any private drill id or FEN reaches `dist/`. `hosted.js` acts only on https: login gate, `PATH_VOICE_URL=/api/voice`, `PATH_REMOTE_STORE` (store.js `remote`: localStorage first, then `/api/progress`, merge on conflict), `PATH_AFTER_LOCK` hook (session-board.js, generic) → engine sentences under the key, spoken while 🎧 is on. Phone (< 720 px): thumb dock (◀ ▶ 🎤 🎧 EN Lock), question under the board. Invitees see only the Board tab (no dossier); first visit → `/welcome.html` (game 2, …Qxf5 stamped).
   *Private drills on the volume:* copied 2026-10-01 over `railway ssh` (sha256 matches the local bundle). After rebuilding `sessions/private/bundle.js`, copy it again the same way (or `scripts/push_drills.py` with a session cookie).
 - **Written branches in games 1–3 (2026-09-27):** JB2bQpWt main/bd4/red1, XbhWoWMi count + trap kg2, qVxKt9G0 punish/trade. Picked by engine check: written only where the continuation is clear; quiet holding lines and the game lines he actually played stay shown. Alternatives added where the engine or the key names an equal move (21.Bc4/Bd3; after 27.Rc8 any defence, incl. 28…Bb5 29.Rb8).
@@ -196,7 +200,10 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
 
 ## 8. Next (in order)
 
-00. **Hosted follow-ups:** he tests mic + dock + sync on the iPhone; **training by level** is built (2026-10-01): `scripts/build_puzzles.py` → `sessions/puzzles.js` (684 Lichess puzzles, CC0, ≥ 5-ply lines, 1000–2800), `training.js` builds "Today · 3 positions near <level>" (group Training, `solve` steps, state in `state.training`, synced); right first try +40, miss −40; invitees land on it from the welcome page. Ideas next: more per day, weekly review of misses; Voice v2 should land in `server/voicecore.py` so both servers get it.
+00. **He tests on the iPhone:** the test invitee QR (private Safari tab or a second device: welcome → Today, board only), mic in **EN and DE** (DE model is on the server but only EN was measured there), thumb dock, Mac ↔ phone sync, Training + "Set rating". Ask what broke.
+00a. **Finish training extras** (written, uncommitted, untested in `training.js`): a day count of 3 / 5 / 10 (`t.perDay`, links in the level bar) and repeats (`t.missed[id] = date`; a miss comes back as "Again" ≥ 2 days later, at most a third of the day; right on the first try removes it; repeats never move the level; `PathTraining._today` hook for tests). Run the two appended tests (`test_count_per_day`, `test_a_miss_comes_back_two_days_later_and_leaves_when_right`), fix what fails, then run `python3 -m pytest`, `build_site.py`, Netlify deploy, commit, ask "push?".
+00b. **Invite admin:** `invite.py --remove <email>` (revoke) and `--list` (who is invited, last login from `users`). Offered to him, not yet asked for.
+00c. Voice v2 (item 0) goes into `server/voicecore.py`, so the local server and Railway both get it; redeploy Railway after.
 0. **Build Voice v2** (§3 "Voice v2", steps 1–4) — his open request from 2026-09-28. Eval on his samples before and after; report accuracy and latency with numbers.
 1. **Read his results** from Aagaard 6.1–6.6 (Log → Aagaard log; Drills tab shows open / solved / again) and his voice experience: what was misheard, whether the tones and "say it again" worked, whether pauses cut moves right (`LISTEN.SILENCE_MS` 700 ms is the knob). Ask the exact voice-drill score.
 1b. After every finished feature: report unpushed commits and ask "push?" — he checks GitHub (2026-09-28: "seit gestern keine commits auf github").
@@ -210,6 +217,14 @@ The browser suite lives in `tests/` and runs with `python3 -m pytest` (pytest + 
    - Voice retraining (§3 "Retraining path") waits for ~200–300 of his samples per language; ask before any paid Modal run.
    - Variations are per browser (`localStorage`); JSON export is the backup.
    - The Today tab's day texts mention Aagaard ch.6 by hand.
+
+### Hosted deploy cheat sheet
+
+- Backend: `railway up --detach` (repo root; project `zwischenzug`, service `api`). Wait: `railway service status --json` → SUCCESS. Logs: `railway logs`. Shell: `railway ssh -- <cmd>`.
+- Site: `python3 scripts/build_site.py && netlify deploy --prod --dir dist --site f13fe0d3-4e74-4efb-8071-6da1baf24a78 --no-build`. Draft first (drop `--prod`) and check at 390×844 with `/api/auth/me` mocked via Playwright `page.route` — that is how every hosted change on 2026-10-01 was checked.
+- Private drills after a rebuild: `B=$(gzip -9c sessions/private/bundle.js | base64 | tr -d '\n'); railway ssh -- "echo $B | base64 -d | gunzip > /data/private/bundle.js"`, compare sha256.
+- Puzzles: re-download the CSV (≈ 300 MB) only when wanted; `python3 scripts/build_puzzles.py` (~3 min) is deterministic.
+- Never install server deps into the global Python without pinning: `requests` must stay 2.32.4 (snowflake-cli).
 
 ## 9. Do not do
 
