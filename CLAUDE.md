@@ -35,6 +35,7 @@ His words — use them, don't replace them:
 
 ## Next
 
+0. Voice: he tries the faster voice + "no"/"yes" on the phone; fine-tune GPU run on Modal waits for his OK (HANDOFF §8 000/000a, §3 "Voice v2 — as built").
 1. He solves Aagaard 6.1–6.6 on the Board / Drills tabs; read his Aagaard log results when he reports.
 2. New Lichess URL → HANDOFF §5A.
 3. `scripts/author_session.py --json` → draft session skeleton (keys still by hand).
