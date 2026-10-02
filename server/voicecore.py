@@ -6,6 +6,7 @@ CC BY-NC-SA 4.0 — personal use; downloaded into the cache dir on first use, ne
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import os
 import re
@@ -13,6 +14,8 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
+import wave
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 CACHE = Path(os.environ.get("ZZ_VOICE_DIR") or Path.home() / ".cache" / "zwischenzug" / "voice")
@@ -81,20 +84,54 @@ def model_path(lang: str) -> Path:
     return path
 
 
+def is_wav16k(audio: bytes) -> bool:
+    """16 kHz mono 16-bit WAV — what the page sends from 🎧 — needs no ffmpeg."""
+    if audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        return False
+    try:
+        with wave.open(io.BytesIO(audio)) as w:
+            return w.getframerate() == 16000 and w.getnchannels() == 1 and w.getsampwidth() == 2
+    except (wave.Error, EOFError):
+        return False
+
+
+def _prepare(audio: bytes, tmp: Path) -> Path:
+    wav = tmp / "in.wav"
+    if is_wav16k(audio):
+        wav.write_bytes(audio)
+        return wav
+    src = tmp / "in"
+    src.write_bytes(audio)
+    subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(src), "-ar", "16000", "-ac", "1", str(wav)],
+                   check=True, timeout=20)
+    return wav
+
+
+def _whisper(wav: Path, lang: str, moves: list[str] | None, tmp: Path) -> str:
+    # -nf: no temperature fallback — on noise it retried at higher temperatures and took seconds.
+    cmd = [WHISPER, "-m", str(model_path(lang)), "-l", lang, "-nt", "-np", "-nf", "-f", str(wav)]
+    if moves:
+        gbnf = tmp / "moves.gbnf"
+        gbnf.write_text(grammar(moves, lang))
+        cmd += ["--grammar", str(gbnf), "--grammar-rule", "root"]
+    out = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
+    return " ".join(out.stdout.split())
+
+
 def transcribe(audio: bytes, lang: str, moves: list[str] | None = None) -> str:
     """Free transcription, or — given the legal moves — one that can only be one of them."""
     with tempfile.TemporaryDirectory() as tmp:
-        src, wav = Path(tmp) / "in", Path(tmp) / "in.wav"
-        src.write_bytes(audio)
-        subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(src), "-ar", "16000", "-ac", "1", str(wav)],
-                       check=True, timeout=20)
-        cmd = [WHISPER, "-m", str(model_path(lang)), "-l", lang, "-nt", "-np", "-f", str(wav)]
-        if moves:
-            gbnf = Path(tmp) / "moves.gbnf"
-            gbnf.write_text(grammar(moves, lang))
-            cmd += ["--grammar", str(gbnf), "--grammar-rule", "root"]
-        out = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
-        return " ".join(out.stdout.split())
+        return _whisper(_prepare(audio, Path(tmp)), lang, moves, Path(tmp))
+
+
+def transcribe_both(audio: bytes, lang: str, moves: list[str]) -> dict:
+    """The free hearing and the one held to the legal moves, side by side: one round trip, one pass of waiting."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = _prepare(audio, Path(tmp))
+        with ThreadPoolExecutor(2) as ex:
+            free = ex.submit(_whisper, wav, lang, None, Path(tmp))
+            held = ex.submit(_whisper, wav, lang, moves, Path(tmp))
+            return {"text": free.result(), "grammar": held.result()}
 
 
 def save_sample(audio: bytes, lang: str, label: str, heard: str, source: str, root: Path | None = None) -> dict:

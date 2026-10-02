@@ -35,18 +35,23 @@ async def _audio(request: Request, lang: str, email: str) -> bytes:
 
 @router.get("/health")
 def health(email: str = Depends(current_user)):
-    return {"ok": True, "langs": sorted(voicecore.MODELS)}
+    return {"ok": True, "langs": sorted(voicecore.MODELS), "both": True}
 
 
 @router.post("/transcribe")
-async def transcribe(request: Request, lang: str = "en", moves: str = "", email: str = Depends(current_user)):
+async def transcribe(request: Request, lang: str = "en", moves: str = "", both: int = 0,
+                     email: str = Depends(current_user)):
     audio = await _audio(request, lang, email)
+    legal = [m for m in moves.split(",") if m]
     start = time.time()
     try:
-        text = await run_in_threadpool(voicecore.transcribe, audio, lang, [m for m in moves.split(",") if m] or None)
+        if both and legal:
+            out = await run_in_threadpool(voicecore.transcribe_both, audio, lang, legal)
+        else:
+            out = {"text": await run_in_threadpool(voicecore.transcribe, audio, lang, legal or None)}
     except (subprocess.SubprocessError, OSError) as e:
         raise HTTPException(500, f"transcription failed: {e}") from None
-    return {"text": text, "ms": round((time.time() - start) * 1000)}
+    return {**out, "ms": round((time.time() - start) * 1000)}
 
 
 @router.post("/sample")

@@ -586,6 +586,10 @@ def test_listening_cuts_speech_into_utterances(browser_page, app_url):
     assert len(two) == 2
     click = page.evaluate(SEGMENT, [48000, [[1, 0], [0.05, 0.5], [1.2, 0]]])
     assert click == [], "a click is not a move"
+    short = page.evaluate(SEGMENT, [48000, [[1, 0], [0.22, 0.3], [1, 0]]])
+    assert len(short) == 1, "a short 'no' gets through"
+    soft = page.evaluate(SEGMENT, [48000, [[1, 0], [0.4, 0.3], [0.3, 0.03], [1, 0]]])
+    assert len(soft) == 1 and soft[0] >= 0.7, "a soft ending stays in the utterance"
 
 
 def test_saying_done_locks(browser_page, app_url):
@@ -604,12 +608,16 @@ window.__calls = []; window.__say = [];
 const reply = j => Promise.resolve({ ok: true, json: () => Promise.resolve(j) });
 window.fetch = (url, opts) => {
   url = String(url); window.__calls.push(url);
-  if (url.includes('/health')) return reply({ ok: true });
+  if (url.includes('/health')) return reply({ ok: true, both: !window.__old });
   if (url.includes('/samples')) return reply({ en: { count: 0 } });
   if (url.includes('/sample?')) return reply({ saved: 'x', stats: { count: window.__calls.filter(c => c.includes('/sample?')).length } });
   if (url.includes('/transcribe')) {
     const next = window.__say.shift();
-    return reply({ text: typeof next === 'function' ? next(url.includes('moves=')) : next });
+    if (next === 'FAIL') return Promise.reject(new Error('network'));
+    const hear = second => typeof next === 'function' ? next(second) : next;
+    // A server with "both" hears free and held-to-legal-moves in one reply; window.__old is one without.
+    if (url.includes('both=1')) return reply({ text: hear(false), grammar: hear(true) });
+    return reply({ text: hear(url.includes('moves=')) });
   }
   return reply({});
 };
@@ -631,20 +639,73 @@ def say(page, *texts):
         page.evaluate("() => window.pathVoiceUtterance()")
 
 
-def test_an_illegal_hearing_gets_a_second_pass_held_to_legal_moves(browser_page, app_url):
+def test_an_illegal_hearing_falls_back_to_the_legal_hearing_in_one_round_trip(browser_page, app_url):
     page = voice_page(browser_page, app_url, 0)
     page.evaluate("() => window.__say.push(second => second ? 'knight E. two' : 'to E. two')")
     page.evaluate("() => window.pathVoiceUtterance()")
     assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
-    second = [c for c in page.evaluate("window.__calls") if "moves=" in c]
-    assert len(second) == 1 and "Ne2" in second[0]
+    calls = [c for c in page.evaluate("window.__calls") if "/transcribe" in c]
+    assert len(calls) == 1 and "both=1" in calls[0] and "Ne2" in calls[0]
 
 
-def test_noise_gets_no_second_pass(browser_page, app_url):
+def test_an_older_server_still_gets_the_second_pass(browser_page, app_url):
+    browser_page.add_init_script("window.__old = true")
     page = voice_page(browser_page, app_url, 0)
-    say(page, "[BLANK_AUDIO]")
-    assert not [c for c in page.evaluate("window.__calls") if "moves=" in c]
+    page.evaluate("() => window.__say.push(s => s ? 'knight E. two' : 'to E. two', s => s ? 'knight E. two' : 'to E. two')")
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
+    calls = [c for c in page.evaluate("window.__calls") if "/transcribe" in c]
+    assert len(calls) == 2 and "moves=" not in calls[0] and "both=1" not in calls[1], "no moves up front to an old server"
+
+
+def test_short_words_take_back_and_lock(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    say(page, "knight E. two", "No.")
+    assert page.inner_text("#boardStatus").startswith("White to move · ▶ 1 more"), "no = take back"
+    page.evaluate("t => window.pathVoiceApply(t)", "nein")
+    assert page.errors == []
+
+
+def test_saying_yes_locks(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 4)
+    page.fill("textarea[name=stop]", "it was already winning")
+    page.select_option("select[name=tag]", "clean")
+    page.fill("textarea[name=note]", "x")
+    page.evaluate("t => window.pathVoiceApply(t)", "Yes!")
+    assert page.is_disabled("#boardLock")
+
+
+def test_one_failed_request_does_not_stop_listening(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    say(page, "FAIL")
+    page.wait_for_timeout(200)
+    assert "Say it again" in page.inner_text("#voiceHeard")
+    assert page.get_attribute("#boardMic", "aria-disabled") == "false", "server still answers /health"
+    say(page, "knight E. two")
+    assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
+
+
+def test_recordings_go_out_as_16k_wav(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    got = page.evaluate("""() => {
+      const f = new Float32Array(48000); for (let i = 0; i < f.length; i++) f[i] = Math.sin(i / 48000 * 2 * Math.PI * 440) * 0.5;
+      const r = window.pathTo16k([f.subarray(0, 20000), f.subarray(20000)], 48000);
+      let peak = 0; for (const x of r.data) peak = Math.max(peak, Math.abs(x));
+      return [r.rate, r.data.length, peak];
+    }""")
+    assert got[0] == 16000 and got[1] == 16000 and 0.45 < got[2] <= 0.5
+
+
+def test_noise_never_takes_the_legal_hearing(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    before = page.inner_text("#boardStatus")
+    page.evaluate("() => window.__say.push(second => second ? 'knight E. two' : '[BLANK_AUDIO]')")
+    page.evaluate("() => window.pathVoiceUtterance()")
     assert "Did not catch" in page.inner_text("#voiceHeard")
+    assert page.inner_text("#boardStatus") == before, "nothing played"
 
 
 def test_a_correction_after_back_is_kept_as_a_sample(browser_page, app_url):

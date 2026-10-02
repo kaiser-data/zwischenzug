@@ -4,7 +4,8 @@
     python3 scripts/voice_server.py            # http://127.0.0.1:8766
 
 POST /transcribe?lang=en|de with the recorded audio (webm/ogg/wav) returns
-{"text": "...", "ms": 123}. The page turns the text into SAN itself.
+{"text": "...", "ms": 123}. With &moves=<legal SAN>&both=1 it also returns "grammar": the same audio
+held to those moves, transcribed at the same time. The page turns the text into SAN itself.
 
 Model: atamano/whisper-chess-tiny (EN) / -de (DE), Whisper-tiny fine-tuned on
 chess moves only. CC BY-NC-SA 4.0 — personal use; it is downloaded into
@@ -24,7 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from server.voicecore import (CACHE, FFMPEG, MAX_BODY, MODELS, SAMPLES, WHISPER, grammar, model_path,  # noqa: E402,F401
-                              sample_stats, save_sample, spoken, transcribe, valid_label)
+                              sample_stats, save_sample, spoken, transcribe, transcribe_both, valid_label)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -52,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/health":
-            self.reply(200, {"ok": True, "langs": sorted(MODELS)})
+            self.reply(200, {"ok": True, "langs": sorted(MODELS), "both": True})
         elif path == "/samples":
             self.reply(200, sample_stats(SAMPLES))
         else:
@@ -89,11 +90,14 @@ class Handler(BaseHTTPRequestHandler):
         moves = [m for m in (q.get("moves") or [""])[0].split(",") if m]
         start = time.time()
         try:
-            text = transcribe(audio, lang, moves or None)
+            if (q.get("both") or ["0"])[0] == "1" and moves:
+                out = transcribe_both(audio, lang, moves)
+            else:
+                out = {"text": transcribe(audio, lang, moves or None)}
         except (subprocess.SubprocessError, OSError) as e:
             self.reply(500, {"error": f"transcription failed: {e}"})
             return
-        self.reply(200, {"text": text, "ms": round((time.time() - start) * 1000)})
+        self.reply(200, {**out, "ms": round((time.time() - start) * 1000)})
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"{self.address_string()} {fmt % args}")

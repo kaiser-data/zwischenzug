@@ -397,8 +397,10 @@
     short: { kurze: 1, kurz: 1, kleine: 1, short: 1, kingside: 1 },
     long: { lange: 1, lang: 1, "große": 1, grosse: 1, long: 1, queenside: 1 },
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
-    undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1 },
-    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1 },
+    // Short words the chess model hears reliably (measured 2026-10-02: "no" 6/7 voices, "yes" 7/7;
+    // "back" and "undo" often come back as squares, so they are kept but not the ones to rely on).
+    undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1, no: 1, nope: 1, wrong: 1, oops: 1, nein: 1, falsch: 1 },
+    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1, yes: 1, ja: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
     skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, naechster: 1, naechste: 1 },
     prev: { previous: 1, vorher: 1, vorige: 1, voriger: 1, "vorheriger": 1 },
@@ -656,7 +658,7 @@
   // text on this machine; the text goes through the same spoken-move reader as a typed answer.
   const VOICE_URL = window.PATH_VOICE_URL || "http://127.0.0.1:8766";
   const VOICE_LANG_KEY = "zwischenzug_voice_lang";
-  const voice = { ready: false, stream: null, rec: null, chunks: [], started: 0 };
+  const voice = { ready: false, both: false, stream: null, rec: null, chunks: [], started: 0 };
 
   function voiceLang() {
     try { return localStorage.getItem(VOICE_LANG_KEY) === "de" ? "de" : "en"; } catch (e) { return "en"; }
@@ -680,6 +682,7 @@
     if (typeof fetch !== "function") return;
     fetch(VOICE_URL + "/health").then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
+        voice.both = !!(j && j.both);   // a server that hears free + legal in one reply says so
         setVoiceReady(!!(j && j.ok));
         // 🎧 stays on across reloads and sessions until he says stop or presses it off.
         if (voice.ready && listenWanted() && !listen.on) listenStart();
@@ -727,7 +730,9 @@
   // Active listening: cut the microphone stream into utterances by loudness, no button needed.
   // A frame is speech when it is clearly above the room's noise floor; an utterance ends after
   // SILENCE_MS of quiet, keeps PREROLL_MS before its start so the first consonant survives.
-  const LISTEN = { PREROLL_MS: 300, SILENCE_MS: 700, MIN_MS: 250, MAX_MS: 4000, START_FRAMES: 2 };
+  // Hysteresis: speech starts clearly above the floor (×3.5) but only ends below ×2, so a soft
+  // ending ("…three") is not cut, and the cut can come sooner. MIN_MS lets a short "no" through.
+  const LISTEN = { PREROLL_MS: 300, SILENCE_MS: 500, MIN_MS: 180, MAX_MS: 4000, START_FRAMES: 2 };
   function makeSegmenter(rate, onSegment) {
     let floor = 0.004, speaking = false, loud = 0, quietMs = 0, frames = [], pre = [], preMs = 0, spokenMs = 0;
     return function push(frame) {
@@ -735,7 +740,7 @@
       for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
       const rms = Math.sqrt(sum / frame.length);
       const ms = frame.length / rate * 1000;
-      const isSpeech = rms > Math.max(0.012, floor * 3.5);
+      const isSpeech = rms > (speaking ? Math.max(0.008, floor * 2) : Math.max(0.012, floor * 3.5));
       if (!speaking) {
         if (!isSpeech) floor = floor * 0.95 + rms * 0.05;
         pre.push(frame); preMs += ms;
@@ -758,8 +763,27 @@
   }
   window.pathMakeSegmenter = makeSegmenter;
 
-  function wavBlob(frames, rate) {
-    const n = frames.reduce(function (a, f) { return a + f.length; }, 0);
+  // 16 kHz mono WAV, the model's own rate: a third of the upload from a 48 kHz mic, and the
+  // server needs no ffmpeg. Each output sample averages its span of input (a box low-pass).
+  function to16k(frames, rate) {
+    const all = new Float32Array(frames.reduce(function (a, f) { return a + f.length; }, 0));
+    let at = 0;
+    frames.forEach(function (f) { all.set(f, at); at += f.length; });
+    if (rate <= 16000) return { data: all, rate: rate };
+    const step = rate / 16000, out = new Float32Array(Math.floor(all.length / step));
+    for (let i = 0; i < out.length; i++) {
+      const a = Math.floor(i * step), b = Math.max(a + 1, Math.floor((i + 1) * step));
+      let sum = 0;
+      for (let j = a; j < b; j++) sum += all[j];
+      out[i] = sum / (b - a);
+    }
+    return { data: out, rate: 16000 };
+  }
+  window.pathTo16k = to16k;
+
+  function wavBlob(input, inputRate) {
+    const pcm = to16k(input, inputRate), rate = pcm.rate, frames = [pcm.data];
+    const n = pcm.data.length;
     const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
     const str = function (o, t) { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
     str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE"); str(12, "fmt ");
@@ -775,12 +799,12 @@
 
   const listen = { on: false, ctx: null, stream: null, node: null, wake: null, queue: Promise.resolve() };
   const LISTEN_KEY = "zwischenzug_voice_listen";
-  const LISTEN_HINT = "Listening. Say a move — or back, reset, done, next, previous, redo, flip, stop.";
+  const LISTEN_HINT = "Listening. Say a move — or no (take back), yes (Lock), reset, next, previous, again, flip, stop.";
   function rememberListen(on) { try { localStorage.setItem(LISTEN_KEY, on ? "1" : "0"); } catch (e) { /* ignore */ } }
   function listenWanted() { try { return localStorage.getItem(LISTEN_KEY) === "1"; } catch (e) { return false; } }
 
-  function transcribeBlob(blob, moves) {
-    const q = "?lang=" + voiceLang() + (moves ? "&moves=" + encodeURIComponent(moves.join(",")) : "");
+  function transcribeBlob(blob, moves, both) {
+    const q = "?lang=" + voiceLang() + (moves && moves.length ? "&moves=" + encodeURIComponent(moves.join(",")) + (both ? "&both=1" : "") : "");
     return fetch(VOICE_URL + "/transcribe" + q, { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
       .then(function (r) { return r.json(); });
   }
@@ -808,19 +832,26 @@
 
   const CHESSY = /[a-h]\s*\.?\s*[1-8]|\b[a-h]\b|knight|bishop|rook|queen|king|castle|springer|läufer|turm|dame|könig|rochade/i;
 
-  // Free first; a move-like answer that is not legal here gets one more pass, held to the legal
-  // moves by a grammar. Silence and noise never get that pass, so no move is forced out of them.
+  // The server hears each recording twice at once: free, and held to the legal moves by a grammar.
+  // The free hearing comes first; a move-like answer that is not legal here falls back to the held one.
+  // Silence and noise never use it, so no move is forced out of them. An older server without
+  // "both" gets the held pass as a second request, as before — it must not get the moves up front,
+  // or it would answer with the held hearing alone.
   function recognise(blob, g) {
-    return transcribeBlob(blob).then(function (j) {
+    const legal = g.moves();
+    return transcribeBlob(blob, voice.both ? legal : null, true).then(function (j) {
       const text = j.text || "";
       if (commandOf(text) || !CHESSY.test(text) || legalIn(new Chess(g.fen()), spokenToSan(text))) return { text: text, heard: text };
       // The grammar holds one move; it wins only when it gets further than the free hearing
       // (a sequence whose third move was misheard keeps its first two).
       const first = legalPrefix(g, spokenToSan(text)).moves.length;
-      return transcribeBlob(blob, g.moves()).then(function (j2) {
-        const again = j2.text || "";
+      const pick = function (again) {
         return legalPrefix(g, spokenToSan(again)).moves.length > first ? { text: again, heard: text } : { text: text, heard: text };
-      }, function () { return { text: text, heard: text }; });
+      };
+      if (typeof j.grammar === "string") return pick(j.grammar);
+      if (!legal.length) return { text: text, heard: text };
+      return transcribeBlob(blob, legal).then(function (j2) { return pick(j2.text || ""); },
+        function () { return { text: text, heard: text }; });
     });
   }
 
@@ -873,7 +904,14 @@
         }
         noteSample(blob, result, res.san);
       });
-    }).catch(function () { setVoiceReady(false); heard("Voice server stopped."); listenStop(); });
+    }).catch(function () {
+      // One failed request (a network blip on the phone) must not end 🎧: stop only if the server is really gone.
+      heard("Did not catch that. Say it again.");
+      if (typeof fetch !== "function") return;
+      return fetch(VOICE_URL + "/health").then(function (r) { if (!r.ok) throw new Error(); }).catch(function () {
+        setVoiceReady(false); heard("Voice server stopped."); listenStop();
+      });
+    });
   }
 
   // Voice drill: say the move shown; every recording is kept with that move as its label.
