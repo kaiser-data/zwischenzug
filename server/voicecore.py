@@ -73,7 +73,15 @@ WHISPER = os.environ.get("WHISPER_CLI") or shutil.which("whisper-cli") or "/opt/
 FFMPEG = os.environ.get("FFMPEG") or shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 
 
+# Our own fine-tune (scripts/voice_ft/, openai/whisper-tiny, MIT): one model for EN and DE. It is used
+# when this file is in the cache dir; remove it to go back to atamano's models.
+OWN_MODEL = "zz-chess-tiny.bin"
+
+
 def model_path(lang: str) -> Path:
+    own = CACHE / OWN_MODEL
+    if own.exists():
+        return own
     path = CACHE / f"whisper-chess-tiny-{lang}.bin"
     if not path.exists():
         CACHE.mkdir(parents=True, exist_ok=True)

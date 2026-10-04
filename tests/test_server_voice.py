@@ -37,6 +37,15 @@ def test_16k_mono_wav_skips_ffmpeg():
     assert not voicecore.is_wav16k(b"\x1aE\xdf\xa3 webm") and not voicecore.is_wav16k(b"RIFF\0\0\0\0WAVEjunk")
 
 
+def test_own_model_wins_when_present(monkeypatch, tmp_path):
+    monkeypatch.setattr(voicecore, "CACHE", tmp_path)
+    for lang in ("en", "de"):
+        (tmp_path / f"whisper-chess-tiny-{lang}.bin").write_bytes(b"x")
+    assert voicecore.model_path("de").name == "whisper-chess-tiny-de.bin"
+    (tmp_path / voicecore.OWN_MODEL).write_bytes(b"x")
+    assert voicecore.model_path("en") == voicecore.model_path("de") == tmp_path / voicecore.OWN_MODEL
+
+
 def test_cache_dir_follows_env(monkeypatch, tmp_path):
     monkeypatch.setenv("ZZ_VOICE_DIR", str(tmp_path))
     mod = importlib.reload(voicecore)
