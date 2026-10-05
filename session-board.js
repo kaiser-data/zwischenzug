@@ -1014,7 +1014,7 @@
   // A round mixes moves (SAN, in German letters when DE is on), squares said alone, his command
   // words, and "silence or a sound" — so the model learns what is NOT a move too. Every recording
   // is kept with its label and position; the score is how well the model hears him today.
-  const drill = { on: false, target: null, fen: "", n: 0, of: 20, right: 0 };
+  const drill = { on: false, target: null, fen: "", n: 0, of: 50, right: 0 };   // 50 a round: 200–300 in a few rounds
   const DRILL_WORDS = {
     en: ["no", "yes", "next", "back", "lock", "again", "flip", "previous", "reset", "go"],
     de: ["nein", "ja", "weiter", "nächste", "zurück", "fertig", "locken", "nochmal", "drehen", "vorher", "los"],
