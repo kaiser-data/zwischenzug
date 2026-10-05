@@ -29,6 +29,8 @@ FT = CACHE / "ft"
 
 
 def norm(text: str) -> str:
+    if text.strip().startswith(("[", "(")):              # [BLANK_AUDIO], (noise): nothing heard
+        return ""
     return " ".join(text.lower().replace(".", " ").replace(",", " ").replace("!", " ").replace("?", " ").split())
 
 

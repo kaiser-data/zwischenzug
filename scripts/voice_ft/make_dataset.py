@@ -44,12 +44,24 @@ HELD_OUT = {"en": {"Moira", "Rishi", "Sandy (English (US))", "Shelley (German (G
 # Canonical spelling of each command, as the page's SPOKEN tables read it.
 COMMANDS = {
     "en": ["back", "no", "undo", "wrong", "yes", "done", "next", "previous", "again", "flip", "reset", "stop",
-           "go", "skip", "continue"],
+           "go", "skip", "continue", "lock"],
     # "vorwärts" is trained so it stops coming out as "vorher" (tiny-a did that: the opposite command).
     "de": ["zurück", "nein", "falsch", "ja", "fertig", "weiter", "vorher", "nochmal", "drehen", "löschen", "stopp",
-           "nächste", "nächster", "nächste Aufgabe", "los", "vorwärts"],
+           "nächste", "nächster", "nächste Aufgabe", "los", "vorwärts", "lock", "locken"],
 }
 COUNTS = {"en": (7000, 1800), "de": (5000, 1800)}   # (moves, commands)
+# Not moves: the model must write nothing for these (2026-10-05: tiny-a turned hum, clicks, "äh" and plain
+# sentences into moves). Spoken ones go through `say`; the rest are made from noise in speak().
+NOISE_WORDS = {
+    "en": ["um", "hmm", "uh", "ah", "okay", "let me think", "wait a second", "what was that", "oh no", "hm hm",
+           "so if he takes there", "that's interesting", "the weather is nice today", "where is my coffee",
+           "I think that's it", "one moment please", "let's see", "really?", "nice", "come on"],
+    "de": ["äh", "ähm", "hm", "also", "mal sehen", "moment", "warte mal", "was war das", "oh nein, Moment",
+           "ja also ich glaube", "das ist interessant", "wo ist mein Kaffee", "schönes Wetter heute",
+           "lass mich überlegen", "na gut", "hmm hmm", "so so", "echt jetzt", "gleich", "ach so"],
+}
+SYNTH_NOISE = ["silence", "white", "hum", "clicks", "knock", "breath", "keys"]
+N_NOISE = {"en": 1100, "de": 900}
 
 
 def positions(n: int, rng: random.Random) -> list[chess.Board]:
@@ -92,6 +104,11 @@ def texts(lang: str, rng: random.Random, scale: float) -> list[dict]:
         rows.append({"text": text, "kind": "move"})
     for i in range(n_cmds):
         rows.append({"text": COMMANDS[lang][i % len(COMMANDS[lang])], "kind": "command"})
+    for i in range(max(1, int(N_NOISE[lang] * scale))):
+        if i % 2:
+            rows.append({"text": "", "kind": "noise", "say": NOISE_WORDS[lang][i % len(NOISE_WORDS[lang])]})
+        else:
+            rows.append({"text": "", "kind": "noise", "synth": SYNTH_NOISE[i // 2 % len(SYNTH_NOISE)], "seed": i})
     for r in rows:
         r["lang"] = lang
         r["voice"] = rng.choice(VOICES[lang])
@@ -99,11 +116,42 @@ def texts(lang: str, rng: random.Random, scale: float) -> list[dict]:
     return rows
 
 
+def synth_noise(kind: str, seed: int) -> np.ndarray:
+    """Half a second to two seconds of something that is not speech, as int16 at 16 kHz."""
+    r = np.random.default_rng(seed)
+    n = int(16000 * r.uniform(0.5, 2.0))
+    t = np.arange(n) / 16000
+    if kind == "silence":
+        x = r.standard_normal(n) * 0.002
+    elif kind == "white":
+        x = r.standard_normal(n) * r.uniform(0.01, 0.1)
+    elif kind == "hum":
+        x = np.cumsum(r.standard_normal(n))
+        x -= np.convolve(x, np.ones(400) / 400, mode="same")
+        x = x / (np.abs(x).max() + 1e-9) * 0.2 + np.sin(2 * np.pi * r.choice([50, 60, 100]) * t) * 0.05
+    elif kind in ("clicks", "keys"):
+        x = np.zeros(n)
+        hits = r.integers(0, n - 400, r.integers(1, 4) if kind == "clicks" else r.integers(4, 12))
+        burst = np.exp(-np.arange(300) / r.uniform(10, 60))
+        for h in hits:
+            x[h:h + 300] += burst * r.standard_normal(300) * r.uniform(0.2, 0.9)
+    elif kind == "knock":
+        x = np.zeros(n)
+        for h in r.integers(0, n - 4000, r.integers(1, 4)):
+            x[h:h + 4000] += np.sin(2 * np.pi * r.uniform(70, 200) * t[:4000]) * np.exp(-t[:4000] * 15) * 0.8
+    else:                                               # breath: noise shaped like a slow exhale
+        x = r.standard_normal(n) * np.sin(np.pi * t / t[-1]) * 0.08
+        x = np.convolve(x, np.ones(6) / 6, mode="same")
+    return (np.clip(x, -1, 1) * 32767).astype(np.int16)
+
+
 def speak(row: dict, tmp: Path, i: int) -> np.ndarray | None:
+    if row.get("synth"):
+        return synth_noise(row["synth"], row["seed"])
     wav = tmp / f"{i}.wav"
     # Command words alone are read flat by `say`; a "!" or "?" now and then gives the shorter, sharper
     # way people bark them. The target stays the bare word.
-    said = row["text"] + ("!" if row["kind"] == "command" and i % 3 == 0 else "")
+    said = row.get("say") or row["text"] + ("!" if row["kind"] == "command" and i % 3 == 0 else "")
     try:
         subprocess.run(["say", "-v", row["voice"], "-r", str(row["rate"]), "-o", str(wav), "--file-format=WAVE",
                         "--data-format=LEI16@16000", said], check=True, timeout=30, capture_output=True)

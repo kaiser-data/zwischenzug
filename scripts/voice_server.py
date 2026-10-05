@@ -25,7 +25,8 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from server.voicecore import (CACHE, FFMPEG, MAX_BODY, MODELS, SAMPLES, WHISPER, grammar, model_path,  # noqa: E402,F401
-                              sample_stats, save_sample, spoken, transcribe, transcribe_both, valid_label)
+                              hear, sample_stats, save_sample, spoken, transcribe, transcribe_both,
+                              valid_label)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -77,12 +78,15 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/sample":
             label = (q.get("label") or [""])[0]
             if not valid_label(label):
-                self.reply(400, {"error": "label must be one SAN move"})
+                self.reply(400, {"error": "label must be a SAN move, sq:<square>, cmd:<word> or noise"})
                 return
             try:
+                conf = (q.get("conf") or [""])[0]
+                extra = {"fen": (q.get("fen") or [""])[0][:100], "conf": float(conf) if conf else None}
                 row = save_sample(audio, lang, label, (q.get("heard") or [""])[0], (q.get("source") or ["drill"])[0],
+                                  extra=extra,
                                   root=SAMPLES)
-            except (subprocess.SubprocessError, OSError) as e:
+            except (subprocess.SubprocessError, OSError, ValueError) as e:
                 self.reply(500, {"error": f"could not save: {e}"})
                 return
             self.reply(200, {"saved": row["file"], "stats": sample_stats(SAMPLES).get(lang)})
@@ -93,7 +97,7 @@ class Handler(BaseHTTPRequestHandler):
             if (q.get("both") or ["0"])[0] == "1" and moves:
                 out = transcribe_both(audio, lang, moves)
             else:
-                out = {"text": transcribe(audio, lang, moves or None)}
+                out = hear(audio, lang, moves or None)
         except (subprocess.SubprocessError, OSError) as e:
             self.reply(500, {"error": f"transcription failed: {e}"})
             return

@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import urllib.request
 import wave
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -118,14 +119,29 @@ def _prepare(audio: bytes, tmp: Path) -> Path:
 
 
 def _whisper(wav: Path, lang: str, moves: list[str] | None, tmp: Path) -> str:
+    return _hear(wav, lang, moves, tmp)["text"]
+
+
+def _hear(wav: Path, lang: str, moves: list[str] | None, tmp: Path) -> dict:
+    """Text, and how sure the model was: the lowest probability of any token it wrote. A move said
+    clearly is ~1.0; noise the chess model turns into a move ("rook E. four") is ~0.2 (measured 2026-10-05)."""
+    tag = "held" if moves else "free"
     # -nf: no temperature fallback — on noise it retried at higher temperatures and took seconds.
-    cmd = [WHISPER, "-m", str(model_path(lang)), "-l", lang, "-nt", "-np", "-nf", "-f", str(wav)]
+    cmd = [WHISPER, "-m", str(model_path(lang)), "-l", lang, "-nt", "-np", "-nf", "-ojf", "-of", str(tmp / tag),
+           "-f", str(wav)]
     if moves:
         gbnf = tmp / "moves.gbnf"
         gbnf.write_text(grammar(moves, lang))
         cmd += ["--grammar", str(gbnf), "--grammar-rule", "root"]
     out = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
-    return " ".join(out.stdout.split())
+    text = " ".join(out.stdout.split())
+    try:
+        segs = json.loads((tmp / f"{tag}.json").read_text(errors="replace"))["transcription"]
+        probs = [t["p"] for s in segs for t in s.get("tokens", []) if not t["text"].startswith("[_")]
+        conf = round(min(probs), 3) if probs else 0.0
+    except (OSError, ValueError, KeyError):
+        conf = None
+    return {"text": text, "conf": conf}
 
 
 def smoke_test(model: Path) -> None:
@@ -143,8 +159,13 @@ def smoke_test(model: Path) -> None:
 
 def transcribe(audio: bytes, lang: str, moves: list[str] | None = None) -> str:
     """Free transcription, or — given the legal moves — one that can only be one of them."""
+    return hear(audio, lang, moves)["text"]
+
+
+def hear(audio: bytes, lang: str, moves: list[str] | None = None) -> dict:
+    """Like transcribe, with the model's confidence: {"text", "conf"}."""
     with tempfile.TemporaryDirectory() as tmp:
-        return _whisper(_prepare(audio, Path(tmp)), lang, moves, Path(tmp))
+        return _hear(_prepare(audio, Path(tmp)), lang, moves, Path(tmp))
 
 
 def transcribe_both(audio: bytes, lang: str, moves: list[str]) -> dict:
@@ -152,23 +173,27 @@ def transcribe_both(audio: bytes, lang: str, moves: list[str]) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         wav = _prepare(audio, Path(tmp))
         with ThreadPoolExecutor(2) as ex:
-            free = ex.submit(_whisper, wav, lang, None, Path(tmp))
-            held = ex.submit(_whisper, wav, lang, moves, Path(tmp))
-            return {"text": free.result(), "grammar": held.result()}
+            free = ex.submit(_hear, wav, lang, None, Path(tmp))
+            held = ex.submit(_hear, wav, lang, moves, Path(tmp))
+            f = free.result()
+            return {"text": f["text"], "conf": f["conf"], "grammar": held.result()["text"]}
 
 
-def save_sample(audio: bytes, lang: str, label: str, heard: str, source: str, root: Path | None = None) -> dict:
-    """One of his recordings with the move it meant, for measuring and later fine-tuning."""
+def save_sample(audio: bytes, lang: str, label: str, heard: str, source: str, root: Path | None = None,
+                extra: dict | None = None) -> dict:
+    """One of his recordings with what it meant (see valid_label), for measuring and fine-tuning.
+    `extra`: fen (where it was said), conf (how sure the model was)."""
     folder = (root or SAMPLES) / lang
     folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    wav = folder / f"{stamp}_{re.sub(r'[^A-Za-z0-9=+#-]', '_', label)}.wav"
+    wav = folder / f"{stamp}_{re.sub(r'[^A-Za-z0-9=+#-]', '_', label)[:40]}.wav"
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "in"
         src.write_bytes(audio)
         subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(src), "-ar", "16000", "-ac", "1", str(wav)],
                        check=True, timeout=20)
-    row = {"file": wav.name, "label": label, "heard": heard, "source": source, "at": stamp}
+    row = {"file": wav.name, "label": label, "heard": heard, "source": source, "at": stamp,
+           **{k: v for k, v in (extra or {}).items() if v not in (None, "")}}
     with (folder / "manifest.jsonl").open("a") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row
@@ -183,5 +208,45 @@ def sample_stats(root: Path | None = None) -> dict:
     return out
 
 
+# What a recording can mean: a SAN move, a square said alone ("sq:f7"), a command word ("cmd:nein"),
+# or nothing — a sound that must not become a move ("noise").
+COMMAND_WORDS = {
+    "en": ["no", "yes", "next", "back", "undo", "wrong", "done", "lock", "stop", "reset", "again", "flip", "previous",
+           "go", "skip", "continue"],
+    "de": ["nein", "ja", "weiter", "nächste", "nächster", "zurück", "falsch", "fertig", "locken", "stopp", "nochmal",
+           "drehen", "vorher", "löschen", "los", "vorwärts"],
+}
+
+
 def valid_label(label: str) -> bool:
+    if label == "noise" or re.fullmatch(r"sq:[a-h][1-8]", label):
+        return True
+    if label.startswith("cmd:"):
+        return any(label[4:] in words for words in COMMAND_WORDS.values())
     return bool(SAN.match(label)) or label.rstrip("+#") in ("O-O", "O-O-O")
+
+
+def target_text(label: str, lang: str) -> str:
+    """The text the model should write for a labelled recording, in the wording the page reads."""
+    if label == "noise":
+        return ""
+    if label.startswith("cmd:"):
+        return label[4:]
+    w = WORDS[lang]
+    if label.startswith("sq:"):
+        f, r = label[3], int(label[4])
+        return (f.upper() if lang == "en" else f) + w["dot"] + " " + w["num"][r - 1]
+    forms = spoken(label, lang)
+    if label.endswith("#"):
+        return forms[0] + " " + w["check"][1]
+    return forms[0] + (" " + w["check"][0] if label.endswith("+") else "")
+
+
+def export_samples(root: Path) -> bytes:
+    """All of one person's recordings and manifests as a zip, for training."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for f in sorted(root.glob("*/*")):
+            if f.suffix in (".wav", ".jsonl"):
+                z.write(f, f.relative_to(root).as_posix())
+    return buf.getvalue()

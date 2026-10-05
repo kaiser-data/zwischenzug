@@ -39,6 +39,8 @@ LANG_NAME = {"en": "english", "de": "german"}
 
 
 def norm(text: str) -> str:
+    if text.strip().startswith(("[", "(")):              # [BLANK_AUDIO], (noise): nothing heard
+        return ""
     return " ".join(text.lower().replace(".", " ").replace(",", " ").replace("!", " ").replace("?", " ").split())
 
 
@@ -94,7 +96,8 @@ def collate(fe, toks):
     def run(batch):
         import torch
         feats = fe([x for x, _ in batch], sampling_rate=16000, return_tensors="pt").input_features
-        ids = [toks[r["lang"]](" " + r["text"]).input_ids[1:] for _, r in batch]   # drop SOT: the model adds it
+        # drop SOT: the model adds it. A noise clip's target is empty: just the end token.
+        ids = [toks[r["lang"]](" " + r["text"] if r["text"] else "").input_ids[1:] for _, r in batch]
         n = max(map(len, ids))
         labels = torch.full((len(ids), n), -100, dtype=torch.long)
         for j, seq in enumerate(ids):

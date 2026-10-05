@@ -17,7 +17,15 @@ def test_spoken_forms_and_grammar():
 
 def test_labels():
     assert voicecore.valid_label("Rac1") and voicecore.valid_label("O-O+")
-    assert not voicecore.valid_label("hello")
+    assert voicecore.valid_label("sq:f7") and voicecore.valid_label("cmd:nein") and voicecore.valid_label("noise")
+    assert not voicecore.valid_label("hello") and not voicecore.valid_label("cmd:banana") and not voicecore.valid_label("sq:z9")
+
+
+def test_what_the_model_should_write_for_each_label():
+    t = voicecore.target_text
+    assert t("Nxc3+", "en") == "knight takes C. three check" and t("Qh8#", "de") == "dame h acht matt"
+    assert t("sq:f7", "en") == "F. seven" and t("sq:f7", "de") == "f sieben"
+    assert t("cmd:nein", "de") == "nein" and t("noise", "en") == "" and t("O-O", "de") == "kurze Rochade"
 
 
 def test_16k_mono_wav_skips_ffmpeg():
@@ -110,3 +118,23 @@ def test_only_a_whole_model_replaces_the_old_one(client, mailer, monkeypatch, tm
     assert (tmp_path / voicecore.OWN_MODEL).read_bytes() == good
     assert client.delete("/api/voice/model").json() == {"model": "atamano"}
     assert not (tmp_path / voicecore.OWN_MODEL).exists()
+
+
+def test_samples_keep_where_they_were_said_and_the_owner_can_export_them(client, mailer, settings, monkeypatch):
+    import io
+    import zipfile
+    monkeypatch.setattr(voicecore, "save_sample", lambda audio, lang, label, heard, source, root, extra: (
+        (root / lang).mkdir(parents=True, exist_ok=True),
+        (root / lang / "a.wav").write_bytes(audio),
+        (root / lang / "manifest.jsonl").write_text(__import__("json").dumps({"label": label, "source": source, **extra}) + "\n"),
+    ) and {"file": "a.wav"})
+    login(client, mailer, OWNER)
+    r = client.post("/api/voice/sample?lang=de&label=cmd:nein&source=drill&fen=8/8/8/8/8/8/8/K6k%20w%20-%20-&conf=0.4",
+                    content=b"RIFFxxxx")
+    assert r.status_code == 200
+    z = zipfile.ZipFile(io.BytesIO(client.get("/api/voice/samples/export").content))
+    assert sorted(z.namelist()) == ["de/a.wav", "de/manifest.jsonl"]
+    row = __import__("json").loads(z.read("de/manifest.jsonl"))
+    assert row == {"label": "cmd:nein", "source": "drill", "fen": "8/8/8/8/8/8/8/K6k w - -", "conf": 0.4}
+    login(client, mailer, FRIEND)
+    assert client.get("/api/voice/samples/export").status_code == 403

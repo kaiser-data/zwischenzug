@@ -400,7 +400,7 @@
     // Short words the chess model hears reliably (measured 2026-10-02: "no" 6/7 voices, "yes" 7/7;
     // "back" and "undo" often come back as squares, so they are kept but not the ones to rely on).
     undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1, no: 1, nope: 1, wrong: 1, oops: 1, nein: 1, falsch: 1, nine: 1 },
-    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1, yes: 1, ja: 1, yeah: 1, yep: 1 },
+    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1, yes: 1, ja: 1, yeah: 1, yep: 1, locken: 1, lochen: 1, abschließen: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
     skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, "nächstes": 1, naechster: 1, naechste: 1, naechstes: 1,
       los: 1, go: 1, "continue": 1, forward: 1, "vorwärts": 1, vorwaerts: 1 },
@@ -915,20 +915,31 @@
   // Silence and noise never use it, so no move is forced out of them. An older server without
   // "both" gets the held pass as a second request, as before — it must not get the moves up front,
   // or it would answer with the held hearing alone.
-  function recognise(blob, g) {
+  // How sure the model must be (its lowest token probability) before a hearing counts. Measured
+  // 2026-10-05: clear moves ~1.0, "nein" 0.89; clicks, hum, "äh", ordinary sentences 0.05–0.3,
+  // "hmm" / "ja also ich glaube" ~0.57. Commands act harder (Lock, next), so they need more.
+  const SURE = { move: 0.6, command: 0.8 };
+  window.PATH_VOICE_SURE = SURE;
+
+  function recognise(blob, g, ungated) {
     const legal = g.moves();
     return transcribeBlob(blob, voice.both ? legal : null, true).then(function (j) {
       const text = j.text || "";
-      if (commandOf(text) || !CHESSY.test(text) || legalIn(new Chess(g.fen()), spokenToSan(text))) return { text: text, heard: text };
+      // A sound the model was not sure about is no move and no command — and it never reaches the
+      // grammar pass, which would turn it into a legal move.
+      if (!ungated && typeof j.conf === "number" && text && j.conf < (commandOf(text) ? SURE.command : SURE.move)) {
+        return { text: "", heard: text, ignored: true, conf: j.conf };
+      }
+      if (commandOf(text) || !CHESSY.test(text) || legalIn(new Chess(g.fen()), spokenToSan(text))) return { text: text, heard: text, conf: j.conf };
       // The grammar holds one move; it wins only when it gets further than the free hearing
       // (a sequence whose third move was misheard keeps its first two).
       const first = legalPrefix(g, spokenToSan(text)).moves.length;
-      const pick = function (again) {
-        return legalPrefix(g, spokenToSan(again)).moves.length > first ? { text: again, heard: text } : { text: text, heard: text };
+      const choose = function (again) {
+        return legalPrefix(g, spokenToSan(again)).moves.length > first ? { text: again, heard: text, conf: j.conf } : { text: text, heard: text, conf: j.conf };
       };
-      if (typeof j.grammar === "string") return pick(j.grammar);
+      if (typeof j.grammar === "string") return choose(j.grammar);
       if (!legal.length) return { text: text, heard: text };
-      return transcribeBlob(blob, legal).then(function (j2) { return pick(j2.text || ""); },
+      return transcribeBlob(blob, legal).then(function (j2) { return choose(j2.text || ""); },
         function () { return { text: text, heard: text }; });
     });
   }
@@ -938,8 +949,10 @@
   const SAMPLE_KEY = "zwischenzug_voice_keep";
   const samples = { pending: null, misheard: null, timer: null };
   function keepSamples() { try { return localStorage.getItem(SAMPLE_KEY) === "1"; } catch (e) { return false; } }
-  function saveSample(blob, label, heardText, source) {
-    const q = "?lang=" + voiceLang() + "&label=" + encodeURIComponent(label) + "&heard=" + encodeURIComponent(heardText || "") + "&source=" + source;
+  function saveSample(blob, label, heardText, source, extra) {
+    const x = extra || {};
+    const q = "?lang=" + voiceLang() + "&label=" + encodeURIComponent(label) + "&heard=" + encodeURIComponent(heardText || "") + "&source=" + source +
+      (x.fen ? "&fen=" + encodeURIComponent(x.fen) : "") + (typeof x.conf === "number" ? "&conf=" + x.conf : "");
     return fetch(VOICE_URL + "/sample" + q, { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
       .then(function (r) { return r.json(); }).then(function (j) { renderSampleStats(j.stats); return j; }, function () { return null; });
   }
@@ -974,6 +987,11 @@
     listen.queue = listen.queue.then(function () {
       if (drill.on) return drillHear(blob);
       return recognise(blob, positionNow()).then(function (result) {
+        if (!String(result.text || "").trim() && !result.ignored) { heard("· nothing heard"); return; }
+        if (result.ignored) {                      // quiet: no tone, nothing played, just a note under the board
+          heard("· ignored a sound (“" + result.heard + "”, sure " + Math.round(result.conf * 100) + " %)");
+          return;
+        }
         const res = voiceApply(result.text);
         if (res.rejected && !res.san && keepSamples() && !drill.on) {
           flushPending();
@@ -992,9 +1010,16 @@
     });
   }
 
-  // Voice drill: say the move shown; every recording is kept with that move as its label.
-  // The score is the model as it is, on his voice — the number that decides whether to retrain.
+  // Training mode ("Train the voice model"): his own voice, everything the board listens for.
+  // A round mixes moves (SAN, in German letters when DE is on), squares said alone, his command
+  // words, and "silence or a sound" — so the model learns what is NOT a move too. Every recording
+  // is kept with its label and position; the score is how well the model hears him today.
   const drill = { on: false, target: null, fen: "", n: 0, of: 20, right: 0 };
+  const DRILL_WORDS = {
+    en: ["no", "yes", "next", "back", "lock", "again", "flip", "previous", "reset", "go"],
+    de: ["nein", "ja", "weiter", "nächste", "zurück", "fertig", "locken", "nochmal", "drehen", "vorher", "los"],
+  };
+  const DE_PIECE = { N: "S", B: "L", R: "T", Q: "D", K: "K" };
   function drillPositions() {
     const out = [];
     steps().forEach(function (s) {
@@ -1008,13 +1033,29 @@
     });
     return out.filter(function (f) { return new Chess(f).moves().length; });
   }
+  function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
   function drillNext() {
     const pool = drillPositions();
     if (!pool.length || drill.n >= drill.of) return drillStop();
-    drill.fen = pool[Math.floor(Math.random() * pool.length)];
-    const moves = new Chess(drill.fen).moves();
-    drill.target = moves[Math.floor(Math.random() * moves.length)];
-    document.getElementById("drillSay").textContent = drill.target;
+    drill.fen = pick(pool);
+    const de = voiceLang() === "de";
+    const moves = new Chess(drill.fen).moves({ verbose: true });
+    const lonely = moves.filter(function (m) { return moves.filter(function (x) { return x.to === m.to; }).length === 1; });
+    const roll = Math.random();
+    if (roll < 0.25) {
+      const w = pick(DRILL_WORDS[voiceLang()]);
+      drill.target = { label: "cmd:" + w, show: "“" + w + "”" };
+    } else if (roll < 0.35) {
+      drill.target = { label: "noise", show: de ? "🤫 Stille — oder ein Geräusch: räuspern, klopfen, „äh“, ein Satz"
+        : "🤫 Silence — or a sound: cough, knock, “um”, a sentence" };
+    } else if (roll < 0.5 && lonely.length) {
+      const m = pick(lonely);
+      drill.target = { label: "sq:" + m.to, show: m.to + (de ? "  (nur das Feld)" : "  (the square alone)") };
+    } else {
+      const san = pick(moves).san;
+      drill.target = { label: san, show: de ? san.replace(/^[NBRQK]/, function (p) { return DE_PIECE[p]; }) : san };
+    }
+    document.getElementById("drillSay").textContent = drill.target.show;
     document.getElementById("drillCount").textContent = (drill.n + 1) + " / " + drill.of + " · recognised " + drill.right;
   }
   function drillStart() {
@@ -1022,7 +1063,7 @@
     document.getElementById("drillPanel").classList.remove("hidden");
     document.getElementById("drillStart").textContent = "Stop drill";
     drillNext();
-    heard("Voice drill: hold 🎤 or turn on 🎧, say the move shown. \"skip\" skips one.");
+    heard("Training: hold 🎤 or turn on 🎧, say what is shown — for 🤫 stay quiet or make a sound. \"skip\" skips one.");
   }
   function drillStop() {
     drill.on = false;
@@ -1030,18 +1071,31 @@
     document.getElementById("drillSay").textContent = "";
     heard(drill.n ? "Drill done: " + drill.right + " of " + drill.n + " recognised." : "");
   }
+  // Did the model hear what was asked? For 🤫: right when it heard no move and no command.
+  function drillJudge(label, text, conf) {
+    const g = new Chess(drill.fen);
+    const sure = function (need) { return typeof conf !== "number" || conf >= need; };
+    if (label === "noise") return !text || /^[\[(]/.test(text) || !sure(SURE.move) || (!commandOf(text) && !CHESSY.test(text));
+    if (label.indexOf("cmd:") === 0) return sure(SURE.command) && commandOf(text) === commandOf(label.slice(4));
+    const got = spokenToSan(text).split(" ")[0] || "";
+    const mv = got && sure(SURE.move) ? looseMove(g, got) : null;
+    if (label.indexOf("sq:") === 0) return !!mv && mv.to === label.slice(3);
+    return !!mv && norm(mv.san) === norm(label);
+  }
   function drillHear(blob) {
-    return recognise(blob, new Chess(drill.fen)).then(function (result) {
+    return recognise(blob, new Chess(drill.fen), true).then(function (result) {
+      const label = drill.target.label;
       const cmd = commandOf(result.text);
-      if (cmd === "stop") return drillStop();
-      if (cmd === "skip") return drillNext();
-      const got = spokenToSan(result.text).split(" ")[0] || "";
-      const g = new Chess(drill.fen);
-      const mv = got ? looseMove(g, got) : null;
-      const ok = !!mv && norm(mv.san) === norm(drill.target);
+      // "skip" / "stop" steer the drill — unless that word is the one being trained.
+      if (label.indexOf("cmd:") !== 0) {
+        if (cmd === "stop") return drillStop();
+        if (cmd === "skip") return drillNext();
+      }
+      const ok = drillJudge(label, result.text, result.conf);
       drill.n++; if (ok) drill.right++;
-      heard((ok ? "✓ " : "✗ ") + "“" + result.heard + "”" + (result.text !== result.heard ? " → 2nd pass “" + result.text + "”" : "") + " → " + (got || "?") + (ok ? "" : " (wanted " + drill.target + ")"));
-      return saveSample(blob, drill.target, result.heard, "drill").then(drillNext);
+      const sure = typeof result.conf === "number" ? " · sure " + Math.round(result.conf * 100) + " %" : "";
+      heard((ok ? "✓ " : "✗ ") + "“" + (result.heard || "—") + "”" + sure + (ok ? "" : " (wanted " + drill.target.show + ")"));
+      return saveSample(blob, label, result.heard, "drill", { fen: drill.fen, conf: result.conf }).then(drillNext);
     });
   }
 
@@ -1117,7 +1171,17 @@
     const only = function (set) { return words.length <= 2 && words.some(function (w) { return w in set; }); };
     const command = only(SPOKEN.undo) ? "undo" : only(SPOKEN.reset) ? "reset" : null;
     // "done" is the spoken Lock: stopping the line stays his decision, hands-free or not.
-    if (only(SPOKEN.done)) { heard("Heard “" + said + "” → Lock"); lockStep(); return { command: "done" }; }
+    if (only(SPOKEN.done)) {
+      // What Lock says (next variation, a wrong ply, open questions) is shown under the board too,
+      // where he is looking — the form's message line is far below it.
+      const err = document.getElementById("boardErr");
+      err.textContent = "";
+      lockStep(true);
+      const said2 = err.textContent || (locked[step] ? "locked" : "");
+      cue(locked[step] || /^Locked/.test(said2));
+      heard("“" + said + "” → Lock" + (said2 ? ": " + said2 : ""));
+      return { command: "done" };
+    }
     if (only(SPOKEN.stop)) { listenStop(); rememberListen(false); heard("Stopped listening."); return { command: "stop" }; }
     const nav = commandOf(said);
     if (nav === "skip" || nav === "prev" || nav === "redo" || nav === "flip") {
@@ -1174,6 +1238,63 @@
   // Short tones so he need not look: a tick when a move went in, a low double tone when it did not.
   // Echo cancellation keeps them out of the microphone; they are shorter than the shortest utterance anyway.
   let cueCtx = null;
+  // A line solved: the board says so where he is looking. Clean (right on the first try) gets confetti,
+  // a rising three-note chime and the streak of clean solves in a row (kept on this device).
+  const STREAK_KEY = "zwischenzug_streak";
+  function celebrate(clean) {
+    let streak = 0;
+    try {
+      streak = clean ? (Number(localStorage.getItem(STREAK_KEY)) || 0) + 1 : 0;
+      localStorage.setItem(STREAK_KEY, String(streak));
+    } catch (e) { /* private mode: no streak, still the effect */ }
+    const board = document.getElementById("chessBoard");
+    if (!board || !board.getBoundingClientRect) return;
+    const r = board.getBoundingClientRect();
+    const layer = document.createElement("div");
+    layer.className = "win-layer";
+    layer.setAttribute("aria-hidden", "true");
+    Object.assign(layer.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+    layer.innerHTML = "<div class='win-check'>✓</div>" + (streak >= 2 ? "<div class='win-streak'>🔥 " + streak + " in a row</div>" : "");
+    if (clean) {
+      const colors = ["#ffd75e", "#2eb460", "#ffffff", "#f2a33a", "#7fd6a0"];
+      for (let i = 0; i < 42; i++) {
+        const bit = document.createElement("i");
+        const a = Math.random() * Math.PI * 2, d = r.width * (0.35 + Math.random() * 0.45);
+        bit.className = "win-bit";
+        bit.style.background = colors[i % colors.length];
+        bit.style.setProperty("--dx", Math.cos(a) * d + "px");
+        bit.style.setProperty("--dy", Math.sin(a) * d - r.width * 0.12 + "px");
+        bit.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg");
+        bit.style.animationDelay = Math.random() * 0.08 + "s";
+        layer.appendChild(bit);
+      }
+    }
+    document.body.appendChild(layer);
+    board.classList.remove("win-glow");
+    void board.offsetWidth;                                // restart the glow if it is still running
+    board.classList.add("win-glow");
+    setTimeout(function () { layer.remove(); board.classList.remove("win-glow"); }, 1700);
+    chime(clean);
+  }
+  window.pathCelebrate = celebrate;
+
+  function chime(clean) {
+    try {
+      cueCtx = cueCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (cueCtx.state === "suspended") cueCtx.resume();
+      (clean ? [[523, 0], [659, 0.09], [784, 0.18], [1047, 0.27]] : [[659, 0], [784, 0.1]]).forEach(function (n) {
+        const o = cueCtx.createOscillator(), v = cueCtx.createGain(), t = cueCtx.currentTime + n[1];
+        o.type = "triangle";
+        o.frequency.value = n[0];
+        v.gain.setValueAtTime(0.0001, t);
+        v.gain.exponentialRampToValueAtTime(0.09, t + 0.015);
+        v.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        o.connect(v); v.connect(cueCtx.destination);
+        o.start(t); o.stop(t + 0.4);
+      });
+    } catch (e) { /* no audio */ }
+  }
+
   function cue(ok) {
     try {
       cueCtx = cueCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -1262,13 +1383,16 @@
     if (need.length && historyMatches(need)) lockStep();
   }
 
-  function lockStep() {
+  // fromVoice: he is looking at the board, so no field gets the focus (no scroll, no phone keyboard).
+  function lockStep(fromVoice) {
     clearTimeout(followTimer);                  // a pending follow must not wipe the grade's message
     const form = document.getElementById("boardForm");
     const s = cur();
     const err = document.getElementById("boardErr");
     const wb = writeBranch();
     const written = ((s.type === "stopPly" || s.type === "solve") && !stopPassed) || !!wb;
+    let won = false;                            // a graded line passed in this Lock: celebrate once, below
+    const celebrateOnce = function () { if (won) celebrate(!firstMiss); won = false; };
     if (written) {
       const graded = wb ? gradeBranch(wb, form) : s.type === "solve" ? gradeSolve(s, form) : gradeStopPly(s, form);
       if (!graded.ok) {
@@ -1291,6 +1415,7 @@
         return;
       }
       let line = graded.line;
+      won = true;
       if (!wb) {
         stopPassed = true;
         passedLine = graded.line || null;
@@ -1304,22 +1429,28 @@
     }
     const need = mustPlayNow();
     if (!historyMatches(need)) {
+      celebrateOnce();
       err.textContent = "On the board play: " + need.join(" ");
       return;
     }
-    if (s.branches && s.branches.length && !branchLocked[activeBranch] && lockBranch()) return;
+    if (s.branches && s.branches.length && !branchLocked[activeBranch]) {
+      won = true;                               // a variation played or written to its end
+      if (lockBranch()) { celebrateOnce(); return; }
+    }
     // The questions come last, so a finished line is never held up by an empty box.
     const missing = Array.from(form.querySelectorAll("[required]")).filter(function (el) {
       return !String(el.value || "").trim();
     });
     if (missing.length) {
+      celebrateOnce();
       err.textContent = written || need.length || (s.branches || []).length
         ? "Line done. Answer the questions, then press Enter or Lock."
         : "Fill every field.";
-      missing[0].focus();
+      if (!fromVoice) missing[0].focus({ preventScroll: true });
       return;
     }
     locked[step] = true;
+    celebrateOnce();
     captureAnswers();
     const entry = entryFor(stepId(step));
     entry.locked = true;
@@ -1621,7 +1752,7 @@
       box.value = numbered(s.fen, moves.slice(2), 2);
     }
     err.textContent = moves.length + " ply written from the board. Is the last one really the end? Then Lock.";
-    box.focus();
+    box.focus({ preventScroll: true });
     box.setSelectionRange(box.value.length, box.value.length);
     return true;
   }

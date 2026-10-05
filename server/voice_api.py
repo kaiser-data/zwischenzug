@@ -48,7 +48,7 @@ async def transcribe(request: Request, lang: str = "en", moves: str = "", both: 
         if both and legal:
             out = await run_in_threadpool(voicecore.transcribe_both, audio, lang, legal)
         else:
-            out = {"text": await run_in_threadpool(voicecore.transcribe, audio, lang, legal or None)}
+            out = await run_in_threadpool(voicecore.hear, audio, lang, legal or None)
     except (subprocess.SubprocessError, OSError) as e:
         raise HTTPException(500, f"transcription failed: {e}") from None
     return {**out, "ms": round((time.time() - start) * 1000)}
@@ -56,16 +56,24 @@ async def transcribe(request: Request, lang: str = "en", moves: str = "", both: 
 
 @router.post("/sample")
 async def sample(request: Request, lang: str = "en", label: str = "", heard: str = "", source: str = "drill",
-                 email: str = Depends(current_user)):
+                 fen: str = "", conf: float | None = None, email: str = Depends(current_user)):
     if not voicecore.valid_label(label):
-        raise HTTPException(400, "label must be one SAN move")
+        raise HTTPException(400, "label must be a SAN move, sq:<square>, cmd:<word> or noise")
     audio = await _audio(request, lang, email)
     root = _user_samples(request, email)
     try:
-        row = await run_in_threadpool(voicecore.save_sample, audio, lang, label, heard, source, root)
+        row = await run_in_threadpool(voicecore.save_sample, audio, lang, label, heard, source, root,
+                                      {"fen": fen[:100], "conf": conf})
     except (subprocess.SubprocessError, OSError) as e:
         raise HTTPException(500, f"could not save: {e}") from None
     return {"saved": row["file"], "stats": voicecore.sample_stats(root).get(lang)}
+
+
+@router.get("/samples/export")
+def export(request: Request, email: str = Depends(owner_user)):
+    """The owner's own recordings as a zip (scripts/voice_ft/pull_samples.py)."""
+    from fastapi.responses import Response
+    return Response(voicecore.export_samples(_user_samples(request, email)), media_type="application/zip")
 
 
 @router.get("/samples")

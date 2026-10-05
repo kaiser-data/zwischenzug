@@ -402,6 +402,46 @@ def test_typed_solve_line_needs_no_replay(browser_page, app_url):
     assert page.errors == []
 
 
+def test_a_solved_line_celebrates_on_the_board(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=left]", "an exchange and a pawn")
+    page.fill("input[name=line]", "13. Qd4 Ne4 14. Qxg7")
+    page.press("input[name=line]", "Enter")                  # stops early: no effect
+    assert page.locator(".win-layer").count() == 0
+    page.fill("input[name=line]", "13. Qd4 Ne4 14. Qxg7 Nxd6 15. Qxh8+ Ke7 16. Qxc8 Rxc8")
+    page.press("input[name=line]", "Enter")
+    assert page.locator(".win-layer .win-check").count() == 1
+    assert page.locator(".win-bit").count() == 0, "a second try is no clean solve: no confetti"
+    assert page.evaluate("localStorage.getItem('zwischenzug_streak')") == "0"
+    page.wait_for_timeout(1900)
+    assert page.locator(".win-layer").count() == 0, "the effect clears itself"
+
+
+def test_a_spoken_lock_stays_at_the_board(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.fill("input[name=line]", "13. Qd4 Ne4 14. Qxg7 Nxd6 15. Qxh8+ Ke7 16. Qxc8 Rxc8")
+    page.wait_for_timeout(400)                                  # the board has followed the line
+    page.evaluate("() => document.activeElement.blur()")
+    page.evaluate("t => window.pathVoiceApply(t)", "ja")
+    assert page.evaluate("document.activeElement.tagName") == "BODY", "no field gets the focus (no scroll, no keyboard)"
+    assert "Answer the questions" in page.inner_text("#voiceHeard"), "Lock's answer shows under the board"
+    assert page.locator(".win-layer").count() == 1
+
+
+def test_a_clean_solve_throws_confetti_and_counts_the_streak(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    page.evaluate("localStorage.setItem('zwischenzug_streak', '2')")
+    page.fill("input[name=left]", "an exchange and a pawn")
+    page.fill("input[name=line]", "13. Qd4 Ne4 14. Qxg7 Nxd6 15. Qxh8+ Ke7 16. Qxc8 Rxc8")
+    page.press("input[name=line]", "Enter")
+    assert page.locator(".win-bit").count() > 20
+    assert "3 in a row" in page.inner_text(".win-streak")
+    assert page.errors == []
+
+
 def test_locked_branches_survive_a_reload(browser_page, app_url):
     page = browser_page
     open_step(page, app_url, CLEAN_SESSION, 2)
@@ -667,7 +707,8 @@ window.fetch = (url, opts) => {
     if (next === 'FAIL') return Promise.reject(new Error('network'));
     const hear = second => typeof next === 'function' ? next(second) : next;
     // A server with "both" hears free and held-to-legal-moves in one reply; window.__old is one without.
-    if (url.includes('both=1')) return reply({ text: hear(false), grammar: hear(true) });
+    const conf = window.__conf ? window.__conf.shift() : undefined;
+    if (url.includes('both=1')) return reply({ text: hear(false), grammar: hear(true), conf });
     return reply({ text: hear(url.includes('moves=')) });
   }
   return reply({});
@@ -697,6 +738,20 @@ def test_an_illegal_hearing_falls_back_to_the_legal_hearing_in_one_round_trip(br
     assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
     calls = [c for c in page.evaluate("window.__calls") if "/transcribe" in c]
     assert len(calls) == 1 and "both=1" in calls[0] and "Ne2" in calls[0]
+
+
+def test_an_unsure_sound_is_ignored_and_never_forced_into_a_move(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    before = page.inner_text("#boardStatus")
+    page.evaluate("() => { window.__conf = [0.19, 0.57, 0.99]; }")
+    page.evaluate("() => window.__say.push(s => s ? 'knight E. two' : 'rook E. four')")    # hum
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert "ignored a sound" in page.inner_text("#voiceHeard")
+    assert page.inner_text("#boardStatus") == before
+    say(page, "yes, yes")                                # "ja also ich glaube": a command needs 0.8
+    assert "ignored a sound" in page.inner_text("#voiceHeard")
+    say(page, "knight E. two")                           # said clearly
+    assert "Ne2" in page.inner_text("#boardStatus").split("·")[1]
 
 
 def test_an_older_server_still_gets_the_second_pass(browser_page, app_url):
@@ -775,8 +830,27 @@ def test_samples_stay_off_unless_he_opts_in(browser_page, app_url):
     assert not [c for c in page.evaluate("window.__calls") if "/sample?" in c]
 
 
+def test_training_asks_for_command_words_and_for_silence(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    page.evaluate("() => { window.__r = [0.1, 0.1, 0.1, 0.1, 0.3]; Math.random = () => window.__r.length ? window.__r.shift() : 0.9; }")
+    page.click("#voiceDrill summary")
+    page.click("#drillStart")
+    assert page.inner_text("#drillSay") == "“yes”"
+    page.evaluate("() => { window.__conf = [0.95]; window.__say.push('Yes.'); }")
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert page.inner_text("#voiceHeard").startswith("✓")
+    assert "🤫" in page.inner_text("#drillSay")
+    page.evaluate("() => { window.__conf = [0.2]; window.__say.push('rook E. four'); }")   # a knock
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert page.inner_text("#voiceHeard").startswith("✓"), "an unsure 'move' at 🤫 counts as silence"
+    saved = [c for c in page.evaluate("window.__calls") if "/sample?" in c]
+    assert "label=cmd%3Ayes" in saved[0] and "fen=" in saved[0] and "conf=0.95" in saved[0]
+    assert "label=noise" in saved[1]
+
+
 def test_voice_drill_scores_and_saves_each_recording(browser_page, app_url):
     page = voice_page(browser_page, app_url, 0)
+    page.evaluate("() => { Math.random = () => 0.9; }")          # a move this time
     page.click("#voiceDrill summary")
     page.click("#drillStart")
     target = page.inner_text("#drillSay")

@@ -48,6 +48,17 @@ def call(method: str, path: str, cookie: str, body: bytes = b"", headers: dict |
     return r.status, r.read().decode()
 
 
+def fetch(path: str, cookie: str) -> bytes:
+    api = urllib.parse.urlparse(API)
+    conn = http.client.HTTPSConnection(api.netloc, timeout=600)
+    conn.request("GET", path, headers={"Cookie": cookie})
+    r = conn.getresponse()
+    body = r.read()
+    if r.status != 200:
+        raise SystemExit(f"GET {path}: {r.status} {body[:200]!r}")
+    return body
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--model", default=str(VOICE / "zz-chess-tiny.bin"),
