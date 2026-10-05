@@ -43,10 +43,13 @@ HELD_OUT = {"en": {"Moira", "Rishi", "Sandy (English (US))", "Shelley (German (G
             "de": {"Sandy (German (Germany))"}}
 # Canonical spelling of each command, as the page's SPOKEN tables read it.
 COMMANDS = {
-    "en": ["back", "no", "undo", "wrong", "yes", "done", "next", "previous", "again", "flip", "reset", "stop"],
-    "de": ["zurück", "nein", "falsch", "ja", "fertig", "weiter", "vorher", "nochmal", "drehen", "löschen", "stopp"],
+    "en": ["back", "no", "undo", "wrong", "yes", "done", "next", "previous", "again", "flip", "reset", "stop",
+           "go", "skip", "continue"],
+    # "vorwärts" is trained so it stops coming out as "vorher" (tiny-a did that: the opposite command).
+    "de": ["zurück", "nein", "falsch", "ja", "fertig", "weiter", "vorher", "nochmal", "drehen", "löschen", "stopp",
+           "nächste", "nächster", "nächste Aufgabe", "los", "vorwärts"],
 }
-COUNTS = {"en": (7000, 1400), "de": (5000, 1100)}   # (moves, commands)
+COUNTS = {"en": (7000, 1800), "de": (5000, 1800)}   # (moves, commands)
 
 
 def positions(n: int, rng: random.Random) -> list[chess.Board]:

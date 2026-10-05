@@ -536,6 +536,57 @@ def test_voice_goes_into_the_answer_box_and_the_board(browser_page, app_url):
     assert page.errors == []
 
 
+def test_voice_writes_from_where_the_board_stands(browser_page, app_url):
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 1)
+    apply = "t => window.pathVoiceApply(t)"
+    for t in ("Queen d4", "knight e four", "bishop f eight"):
+        page.evaluate(apply, t)
+    assert page.input_value("input[name=line]") == "Qd4 Ne4 Bf8"
+    page.wait_for_timeout(400)
+    page.click("#boardBack")
+    page.click("#boardBack")                             # the board stands after Qd4
+    page.evaluate(apply, "knight e four")                # the move already next: just steps along
+    assert page.input_value("input[name=line]") == "Qd4 Ne4 Bf8"
+    page.wait_for_timeout(400)
+    page.click("#boardBack")
+    page.evaluate(apply, "knight d three")               # a different move replaces the rest
+    assert page.input_value("input[name=line]") == "Qd4 Nd3"
+    page.wait_for_timeout(400)
+    assert "Qd4 Nd3" in page.inner_text("#boardStatus")
+    assert "Ne4 3. Bf8" in page.inner_text("#varList") or "Ne4 14. Bf8" in page.inner_text("#varList"), \
+        "the replaced line is kept as a side line"
+    page.evaluate(apply, "nein")                         # takes back the move at the board
+    assert page.input_value("input[name=line]") == "Qd4"
+    assert page.errors == []
+
+
+def test_a_square_alone_is_enough_when_one_piece_can_go_there(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    lp = "([f, s]) => window.pathLegalPrefix(f, s)"
+    fen = "4k3/8/8/8/8/8/8/R3K3 w - - 0 1"
+    assert page.evaluate(lp, [fen, page.evaluate("t => window.pathSpokenToSan(t)", "A. seven")])["moves"] == ["Ra7+"] \
+        or page.evaluate(lp, [fen, "a7"])["moves"] == ["Ra7"]
+    assert page.evaluate(lp, [fen, "a7"])["moves"] == ["Ra7"]
+    two = page.evaluate(lp, ["4k3/8/8/8/8/8/8/R3KR2 w - - 0 1", "d1"])
+    assert two["moves"] == [] and two["why"] in ("which one: Rad1 or Rfd1?", "which one: Rfd1 or Rad1?", "which one: Kd1 or Rad1 or Rfd1?") \
+        or "which one" in two["why"]
+    promo = page.evaluate(lp, ["8/4P3/8/8/8/8/k7/4K3 w - - 0 1", "e8"])
+    assert promo["moves"] == ["e8=Q"]
+    pawn = page.evaluate(lp, ["4k3/8/8/8/8/8/4P3/R3K3 w - - 0 1", "e4"])
+    assert pawn["moves"] == ["e4"], "a pawn move stays the pawn move"
+
+
+def test_more_ways_to_say_next(browser_page, app_url):
+    page = browser_page
+    page.goto(app_url(session=CLEAN_SESSION, tab="session"))
+    page.wait_for_selector("#chessBoard button")
+    for word in ("nächste", "Nächste Aufgabe.", "weiter", "next", "los", "go"):
+        assert page.evaluate("t => window.pathVoiceApply(t)", word).get("command") == "skip", word
+
+
 def test_voice_plays_on_the_board_when_there_is_no_answer_box(browser_page, app_url):
     page = browser_page
     open_step(page, app_url, CLEAN_SESSION, 0)           # a replay step: the moves go on the board

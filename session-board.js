@@ -399,10 +399,11 @@
     castle: { rochade: 1, rochiert: 1, castle: 1, castles: 1, castling: 1 },
     // Short words the chess model hears reliably (measured 2026-10-02: "no" 6/7 voices, "yes" 7/7;
     // "back" and "undo" often come back as squares, so they are kept but not the ones to rely on).
-    undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1, no: 1, nope: 1, wrong: 1, oops: 1, nein: 1, falsch: 1 },
-    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1, yes: 1, ja: 1 },
+    undo: { "zurück": 1, zurueck: 1, zur: 1, back: 1, undo: 1, "rückgängig": 1, no: 1, nope: 1, wrong: 1, oops: 1, nein: 1, falsch: 1, nine: 1 },
+    done: { done: 1, fertig: 1, lock: 1, ende: 1, finished: 1, submit: 1, abgeben: 1, yes: 1, ja: 1, yeah: 1, yep: 1 },
     stop: { stop: 1, stopp: 1, halt: 1 },
-    skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, naechster: 1, naechste: 1 },
+    skip: { skip: 1, weiter: 1, next: 1, "nächster": 1, "nächste": 1, "nächstes": 1, naechster: 1, naechste: 1, naechstes: 1,
+      los: 1, go: 1, "continue": 1, forward: 1, "vorwärts": 1, vorwaerts: 1 },
     prev: { previous: 1, vorher: 1, vorige: 1, voriger: 1, "vorheriger": 1 },
     redo: { redo: 1, nochmal: 1, again: 1, wiederholen: 1 },
     flip: { flip: 1, drehen: 1, umdrehen: 1 },
@@ -513,7 +514,18 @@
     if (exact) return exact;
     const bare = function (m) { return m.replace(/[x+#=]/g, ""); };
     const fits = g.moves().filter(function (m) { return bare(m) === bare(t); });
-    return fits.length === 1 ? g.move(fits[0]) : null;
+    if (fits.length === 1) return g.move(fits[0]);
+    // Only the target square ("f7"): enough when one piece can go there. A promotion is one pawn
+    // with four choices: the queen.
+    const sq = String(t).replace(/[+#]$/, "");
+    if (/^[a-h][1-8]$/.test(sq)) {
+      const to = g.moves({ verbose: true }).filter(function (m) { return m.to === sq; });
+      if (to.length === 1) return g.move(to[0].san);
+      if (to.length && to.every(function (m) { return m.from === to[0].from && m.promotion; })) {
+        return g.move(to.filter(function (m) { return m.promotion === "q"; })[0].san);
+      }
+    }
+    return null;
   }
 
   function tokens(text) {
@@ -799,7 +811,7 @@
 
   const listen = { on: false, ctx: null, stream: null, node: null, wake: null, queue: Promise.resolve() };
   const LISTEN_KEY = "zwischenzug_voice_listen";
-  const LISTEN_HINT = "Listening. Say a move — or no (take back), yes (Lock), reset, next, previous, again, flip, stop.";
+  const LISTEN_HINT = "Listening. Say a move (a square alone is enough when one piece can go there) — or no / nein (take back), yes / ja (Lock), next / weiter, previous, again, flip, stop.";
   function rememberListen(on) { try { localStorage.setItem(LISTEN_KEY, on ? "1" : "0"); } catch (e) { /* ignore */ } }
   function listenWanted() { try { return localStorage.getItem(LISTEN_KEY) === "1"; } catch (e) { return false; } }
 
@@ -809,12 +821,78 @@
       .then(function (r) { return r.json(); });
   }
 
-  // Where the next spoken move will be played: the end of the written line, or the board.
+  // Where the next spoken move is played: always the position the board shows. On a written step
+  // that is a point in the answer line — at its end the move extends it, earlier it replaces the rest.
   function positionNow() {
     if (!takesLine()) return new Chess(game.fen());
     const g = new Chess(cur().fen);
-    writtenLine(cur(), document.getElementById("boardForm")).every(function (m) { return !!looseMove(g, m); });
+    boardPlayed().every(function (m) { return !!looseMove(g, m); });
     return g;
+  }
+
+  // What the step itself puts at the start of a written line: the candidate, a branch's given plies.
+  function lineBase() {
+    const s = cur(), wb = writeBranch();
+    if (wb) return (wb.mustPlay || []).slice(0, givenOf(wb));
+    return s.type === "stopPly" ? [(s.stopPly || {}).candidate] : [];
+  }
+
+  // The board's moves from the step position, never shorter than what the step gives.
+  function boardPlayed() {
+    const h = game ? game.history() : [];
+    const base = lineBase();
+    return h.length < base.length && startsWith(base.map(norm), h) ? base.slice() : h;
+  }
+
+  // Write a whole line (from the step position) into the answer boxes, as plain SAN.
+  function writeLine(moves) {
+    const form = document.getElementById("boardForm"), wb = writeBranch();
+    if (wb) form.elements.line.value = moves.slice(givenOf(wb)).join(" ");
+    else if (cur().type === "solve") form.elements.line.value = moves.join(" ");
+    else {
+      form.elements.scare.value = moves[1] || "";
+      form.elements["continue"].value = moves.slice(2).join(" ");
+    }
+  }
+
+  // A spoken move or command on a written step, at the board's position. Saying the move that is
+  // already next just steps along; a different one replaces the rest of the line, and the replaced
+  // line is kept under Saved lines as a side line, so nothing he wrote is lost.
+  function voiceIntoLine(command, moves) {
+    const played = boardPlayed(), base = lineBase();
+    const full = sanOf(writtenLine(cur(), document.getElementById("boardForm")));
+    const ahead = startsWith(full, played) ? full.slice(played.length) : [];
+    if (!command && moves.length && startsWith(ahead, moves)) {
+      rewindTo(full, played.length + moves.length);      // one step along; the rest stays ahead
+      return;
+    }
+    let line;
+    if (command === "undo") line = played.slice(0, Math.max(base.length, played.length - 1));
+    else if (command === "reset") line = base.slice();
+    else line = played.concat(moves);
+    if (!command && ahead.length) keepReplaced(full);
+    writeLine(line);
+    // The board shows the new line's end at once; followAnswer re-checks it from the box.
+    const g = new Chess(cur().fen);
+    line.every(function (m) { return !!looseMove(g, m); });
+    game = g; future = []; futureGame = game; selected = null;
+    renderBoard();
+    followAnswer();
+  }
+
+  // A written line as real SAN from the step position, as far as it is legal.
+  function sanOf(moves) {
+    const out = [], g = new Chess(cur().fen);
+    moves.every(function (m) { const mv = looseMove(g, m); if (mv) out.push(mv.san); return !!mv; });
+    return out;
+  }
+
+  function keepReplaced(sans) {
+    const lines = varGet();
+    if (!sans.length || lines.some(function (l) { return l.moves.join(" ") === sans.join(" "); })) return;
+    lines.push({ moves: sans, note: "replaced by voice", ts: Date.now() });
+    varSet(lines);
+    renderVariations();
   }
 
   function legalIn(g, san) {
@@ -1056,18 +1134,8 @@
     }
     const san = taken.moves.join(" ");
     const rest = taken.bad ? " · did not get " + taken.bad + " (" + taken.why.replace(/\.$/, "") + "), say it again" : "";
-    if (takesLine()) {
-      const form = document.getElementById("boardForm");
-      const s = cur();
-      let box = form.elements.line;
-      if (s.type === "stopPly" && !writeBranch()) {
-        box = String(form.elements.scare.value).trim() || command ? form.elements["continue"] : form.elements.scare;
-        if (command && !String(box.value).trim()) box = form.elements.scare;
-      }
-      // Re-read the whole box so "back" / "reset" act on what is already written.
-      box.value = spokenToSan(box.value + " " + (command ? said : san)).trim();
-      followAnswer();
-    } else if (command === "undo") navigate("back");
+    if (takesLine()) voiceIntoLine(command, taken.moves);
+    else if (command === "undo") navigate("back");
     else if (command === "reset") { game = new Chess(cur().fen); selected = null; renderBoard(); }
     else {
       taken.moves.forEach(function (m) { keepFuture(game.move(m)); });
@@ -1092,7 +1160,8 @@
       out.bad = words[i];
       const to = (words[i].match(/[a-h][1-8]/g) || []).pop();
       const piece = (words[i].match(/^[KQRBN]/) || ["P"])[0].toLowerCase();
-      const fits = to ? g.moves({ verbose: true }).filter(function (m) { return m.to === to && m.piece === piece; }) : [];
+      const onlySquare = /^[a-h][1-8][+#]?$/.test(words[i]);    // "f7": any piece that can go there
+      const fits = to ? g.moves({ verbose: true }).filter(function (m) { return m.to === to && (onlySquare || m.piece === piece); }) : [];
       out.why = fits.length > 1 ? "which one: " + fits.map(function (m) { return m.san; }).join(" or ") + "?"
         : SAN_RE.test(words[i]) ? words[i] + " is not legal here." : "not a move.";
       break;
