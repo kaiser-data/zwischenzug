@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from server import voicecore
-from server_fixtures import FRIEND, login
+from server_fixtures import FRIEND, OWNER, login
 
 
 def test_spoken_forms_and_grammar():
@@ -42,7 +42,9 @@ def test_own_model_wins_when_present(monkeypatch, tmp_path):
     for lang in ("en", "de"):
         (tmp_path / f"whisper-chess-tiny-{lang}.bin").write_bytes(b"x")
     assert voicecore.model_path("de").name == "whisper-chess-tiny-de.bin"
-    (tmp_path / voicecore.OWN_MODEL).write_bytes(b"x")
+    (tmp_path / voicecore.OWN_MODEL).write_bytes(b"")
+    assert voicecore.model_path("en").name == "whisper-chess-tiny-en.bin", "an empty file is never loaded"
+    (tmp_path / voicecore.OWN_MODEL).write_bytes(b"x" * (2 * 1024 * 1024))
     assert voicecore.model_path("en") == voicecore.model_path("de") == tmp_path / voicecore.OWN_MODEL
 
 
@@ -85,3 +87,26 @@ def test_hosted_transcribe_and_per_user_samples(client, mailer, settings, tmp_pa
     assert client.get("/api/voice/samples").json()["en"]["count"] == 1
     assert len(list((settings.data_dir / "samples").glob("*/en/*.wav"))) == 1
     assert not (voicecore.SAMPLES / "en" / s.json()["saved"]).exists()
+
+
+def test_only_a_whole_model_replaces_the_old_one(client, mailer, monkeypatch, tmp_path):
+    import hashlib
+    monkeypatch.setattr(voicecore, "CACHE", tmp_path)
+    ran = []
+    monkeypatch.setattr(voicecore, "smoke_test", lambda p: ran.append(p))
+    good = voicecore.GGML_MAGIC + b"\1" * (11 * 1024 * 1024)
+    sha = hashlib.sha256(good).hexdigest()
+    put = lambda body, h: client.put("/api/voice/model", content=body, headers={"X-Sha256": h})  # noqa: E731
+
+    login(client, mailer, FRIEND)
+    assert put(good, sha).status_code == 403
+    login(client, mailer, OWNER)
+    assert put(b"", hashlib.sha256(b"").hexdigest()).status_code == 400            # the 2026-10-05 empty file
+    assert put(good, "0" * 64).json()["detail"].startswith("arrived damaged")
+    assert put(b"GGUF" + good[4:], hashlib.sha256(b"GGUF" + good[4:]).hexdigest()).status_code == 400
+    assert not (tmp_path / voicecore.OWN_MODEL).exists() and not ran
+    r = put(good, sha)
+    assert r.status_code == 200 and r.json()["sha256"] == sha and len(ran) == 1
+    assert (tmp_path / voicecore.OWN_MODEL).read_bytes() == good
+    assert client.delete("/api/voice/model").json() == {"model": "atamano"}
+    assert not (tmp_path / voicecore.OWN_MODEL).exists()

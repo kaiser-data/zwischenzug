@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server import voicecore
-from server.auth import current_user
+from server.auth import current_user, owner_user
 
 router = APIRouter(prefix="/api/voice")
 
@@ -71,3 +71,48 @@ async def sample(request: Request, lang: str = "en", label: str = "", heard: str
 @router.get("/samples")
 def samples(request: Request, email: str = Depends(current_user)):
     return voicecore.sample_stats(_user_samples(request, email))
+
+
+MODEL_MIN, MODEL_MAX = 10 * 1024 * 1024, 400 * 1024 * 1024
+
+
+@router.put("/model")
+async def put_model(request: Request, email: str = Depends(owner_user)):
+    """Our own speech model (scripts/voice_ft/push_model.py). Taken only when it arrived whole —
+    size, ggml magic, the sha256 the sender names — and whisper-cli runs with it; else the old one stays."""
+    want = (request.headers.get("x-sha256") or "").lower()
+    if len(want) != 64:
+        raise HTTPException(400, "send the file's sha256 in X-Sha256")
+    dest = voicecore.CACHE / voicecore.OWN_MODEL
+    part = dest.with_suffix(".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    digest, size = hashlib.sha256(), 0
+    with part.open("wb") as f:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MODEL_MAX:
+                part.unlink(missing_ok=True)
+                raise HTTPException(413, "model over 400 MB")
+            digest.update(chunk)
+            f.write(chunk)
+    got = digest.hexdigest()
+    problem = ("too small to be a model" if size < MODEL_MIN else
+               "not a whisper.cpp model" if part.read_bytes()[:4] != voicecore.GGML_MAGIC else
+               f"arrived damaged (sha256 {got[:16]}…)" if got != want else "")
+    if not problem:
+        try:
+            await run_in_threadpool(voicecore.smoke_test, part)
+        except (subprocess.SubprocessError, OSError) as e:
+            problem = f"whisper-cli cannot run it: {e}"
+    if problem:
+        part.unlink(missing_ok=True)
+        raise HTTPException(400, problem + " — the old model stays")
+    part.replace(dest)
+    return {"sha256": got, "bytes": size}
+
+
+@router.delete("/model")
+def delete_model(email: str = Depends(owner_user)):
+    """Back to atamano's models."""
+    (voicecore.CACHE / voicecore.OWN_MODEL).unlink(missing_ok=True)
+    return {"model": "atamano"}

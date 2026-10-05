@@ -76,11 +76,13 @@ FFMPEG = os.environ.get("FFMPEG") or shutil.which("ffmpeg") or "/opt/homebrew/bi
 # Our own fine-tune (scripts/voice_ft/, openai/whisper-tiny, MIT): one model for EN and DE. It is used
 # when this file is in the cache dir; remove it to go back to atamano's models.
 OWN_MODEL = "zz-chess-tiny.bin"
+GGML_MAGIC = b"lmgg"          # 0x67676d6c, little-endian
 
 
 def model_path(lang: str) -> Path:
     own = CACHE / OWN_MODEL
-    if own.exists():
+    # An empty or half-written file must never be loaded (2026-10-05: a pipe that dropped stdin left 0 bytes).
+    if own.exists() and own.stat().st_size > 1024 * 1024:
         return own
     path = CACHE / f"whisper-chess-tiny-{lang}.bin"
     if not path.exists():
@@ -124,6 +126,19 @@ def _whisper(wav: Path, lang: str, moves: list[str] | None, tmp: Path) -> str:
         cmd += ["--grammar", str(gbnf), "--grammar-rule", "root"]
     out = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
     return " ".join(out.stdout.split())
+
+
+def smoke_test(model: Path) -> None:
+    """whisper-cli loads `model` and transcribes half a second of silence, or raises."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "silence.wav"
+        with wave.open(str(wav), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(b"\0\0" * 8000)
+        subprocess.run([WHISPER, "-m", str(model), "-l", "en", "-nt", "-np", "-nf", "-f", str(wav)],
+                       check=True, capture_output=True, timeout=60)
 
 
 def transcribe(audio: bytes, lang: str, moves: list[str] | None = None) -> str:
