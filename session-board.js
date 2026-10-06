@@ -736,7 +736,7 @@
     const rec = voice.rec;
     voice.rec = null;
     if (Date.now() - voice.started < 300) { heard("Hold 🎤 while you speak."); return; }
-    utterance(new Blob(voice.chunks, { type: rec.mimeType }));
+    utterance(new Blob(voice.chunks, { type: rec.mimeType }), voice.started);
   }
 
   // Active listening: cut the microphone stream into utterances by loudness, no button needed.
@@ -982,10 +982,20 @@
 
   // Every recording, from 🎤 or 🎧, goes through here, one at a time and in order,
   // so "back" never overtakes the move it takes back.
-  function utterance(blob) {
+  // startedAt: when he began speaking (ms) — the drill labels a recording by what was shown then.
+  function utterance(blob, startedAt) {
+    let ask = null;
+    if (drill.on) {
+      // One recording per item, and only one begun after the item was shown: a second piece
+      // ("…Schach" cut off) or words said while the next item appeared would get the wrong label.
+      const at = startedAt == null ? Date.now() : startedAt + LISTEN.PREROLL_MS;
+      if (!drill.open || at < drill.shownAt) { heard("· not saved — wait for the next item, then say it"); return; }
+      drill.open = false;
+      ask = { target: drill.target, fen: drill.fen };
+    }
     heard("…");
     listen.queue = listen.queue.then(function () {
-      if (drill.on) return drillHear(blob);
+      if (ask) return drillHear(blob, ask);
       return recognise(blob, positionNow()).then(function (result) {
         if (!String(result.text || "").trim() && !result.ignored) { heard("· nothing heard"); return; }
         if (result.ignored) {                      // quiet: no tone, nothing played, just a note under the board
@@ -1014,7 +1024,7 @@
   // A round mixes moves (SAN, in German letters when DE is on), squares said alone, his command
   // words, and "silence or a sound" — so the model learns what is NOT a move too. Every recording
   // is kept with its label and position; the score is how well the model hears him today.
-  const drill = { on: false, target: null, fen: "", n: 0, of: 50, right: 0 };   // 50 a round: 200–300 in a few rounds
+  const drill = { on: false, target: null, fen: "", n: 0, of: 50, right: 0, open: false, shownAt: 0, timer: null };   // 50 a round: 200–300 in a few rounds
   const DRILL_WORDS = {
     en: ["no", "yes", "next", "back", "lock", "again", "flip", "previous", "reset", "go"],
     de: ["nein", "ja", "weiter", "nächste", "zurück", "fertig", "locken", "nochmal", "drehen", "vorher", "los"],
@@ -1034,9 +1044,20 @@
     return out.filter(function (f) { return new Chess(f).moves().length; });
   }
   function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+  // A short pause between items, so the last word is out before the next item shows.
+  function drillGapMs() { return window.PATH_DRILL_GAP_MS != null ? window.PATH_DRILL_GAP_MS : 1200; }
   function drillNext() {
     const pool = drillPositions();
     if (!pool.length || drill.n >= drill.of) return drillStop();
+    drill.open = false;
+    clearTimeout(drill.timer);
+    const gap = drillGapMs();
+    if (gap > 0) {
+      document.getElementById("drillSay").textContent = "…";
+      drill.timer = setTimeout(function () { if (drill.on) drillShow(pool); }, gap);
+    } else drillShow(pool);
+  }
+  function drillShow(pool) {
     drill.fen = pick(pool);
     const de = voiceLang() === "de";
     const moves = new Chess(drill.fen).moves({ verbose: true });
@@ -1057,6 +1078,8 @@
     }
     document.getElementById("drillSay").textContent = drill.target.show;
     document.getElementById("drillCount").textContent = (drill.n + 1) + " / " + drill.of + " · recognised " + drill.right;
+    drill.shownAt = Date.now();
+    drill.open = true;
   }
   function drillStart() {
     drill.on = true; drill.n = 0; drill.right = 0;
@@ -1066,14 +1089,15 @@
     heard("Training: hold 🎤 or turn on 🎧, say what is shown — for 🤫 stay quiet or make a sound. \"skip\" skips one.");
   }
   function drillStop() {
-    drill.on = false;
+    drill.on = false; drill.open = false;
+    clearTimeout(drill.timer);
     document.getElementById("drillStart").textContent = "Start voice drill";
     document.getElementById("drillSay").textContent = "";
     heard(drill.n ? "Drill done: " + drill.right + " of " + drill.n + " recognised." : "");
   }
   // Did the model hear what was asked? For 🤫: right when it heard no move and no command.
-  function drillJudge(label, text, conf) {
-    const g = new Chess(drill.fen);
+  function drillJudge(label, text, conf, fen) {
+    const g = new Chess(fen);
     const sure = function (need) { return typeof conf !== "number" || conf >= need; };
     if (label === "noise") return !text || /^[\[(]/.test(text) || !sure(SURE.move) || (!commandOf(text) && !CHESSY.test(text));
     if (label.indexOf("cmd:") === 0) return sure(SURE.command) && commandOf(text) === commandOf(label.slice(4));
@@ -1082,20 +1106,23 @@
     if (label.indexOf("sq:") === 0) return !!mv && mv.to === label.slice(3);
     return !!mv && norm(mv.san) === norm(label);
   }
-  function drillHear(blob) {
-    return recognise(blob, new Chess(drill.fen), true).then(function (result) {
-      const label = drill.target.label;
+  function drillHear(blob, ask) {
+    return recognise(blob, new Chess(ask.fen), true).then(function (result) {
+      const label = ask.target.label;
       const cmd = commandOf(result.text);
       // "skip" / "stop" steer the drill — unless that word is the one being trained.
       if (label.indexOf("cmd:") !== 0) {
         if (cmd === "stop") return drillStop();
         if (cmd === "skip") return drillNext();
       }
-      const ok = drillJudge(label, result.text, result.conf);
+      const ok = drillJudge(label, result.text, result.conf, ask.fen);
       drill.n++; if (ok) drill.right++;
       const sure = typeof result.conf === "number" ? " · sure " + Math.round(result.conf * 100) + " %" : "";
-      heard((ok ? "✓ " : "✗ ") + "“" + (result.heard || "—") + "”" + sure + (ok ? "" : " (wanted " + drill.target.show + ")"));
-      return saveSample(blob, label, result.heard, "drill", { fen: drill.fen, conf: result.conf }).then(drillNext);
+      heard((ok ? "✓ " : "✗ ") + "“" + (result.heard || "—") + "”" + sure + (ok ? "" : " (wanted " + ask.target.show + ")"));
+      return saveSample(blob, label, result.heard, "drill", { fen: ask.fen, conf: result.conf }).then(drillNext);
+    }, function (err) {
+      if (drill.on && drill.target === ask.target) drill.open = true;   // nothing heard: say it again
+      throw err;
     });
   }
 
@@ -1126,7 +1153,8 @@
         const mute = ctx.createGain();
         mute.gain.value = 0;
         const push = makeSegmenter(ctx.sampleRate, function (frames) {
-          if (listen.on) utterance(wavBlob(frames, ctx.sampleRate));
+          const ms = frames.reduce(function (a, f) { return a + f.length; }, 0) / ctx.sampleRate * 1000;
+          if (listen.on) utterance(wavBlob(frames, ctx.sampleRate), Date.now() - ms);
         });
         node.onaudioprocess = function (e) { push(new Float32Array(e.inputBuffer.getChannelData(0))); };
         src.connect(node); node.connect(mute); mute.connect(ctx.destination);
@@ -1356,7 +1384,7 @@
     const order = ids.slice(at + 1).concat(ids.slice(0, Math.max(0, at)));
     return order.find(function (id) { return !sessionDone(id); }) || null;
   }
-  window.pathVoiceUtterance = function (blob) { utterance(blob || new Blob(["x"], { type: "audio/wav" })); return listen.queue; };
+  window.pathVoiceUtterance = function (blob, startedAt) { utterance(blob || new Blob(["x"], { type: "audio/wav" }), startedAt); return listen.queue; };
 
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
   function autoCheck() {

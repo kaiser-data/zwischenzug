@@ -832,7 +832,7 @@ def test_samples_stay_off_unless_he_opts_in(browser_page, app_url):
 
 def test_training_asks_for_command_words_and_for_silence(browser_page, app_url):
     page = voice_page(browser_page, app_url, 0)
-    page.evaluate("() => { window.__r = [0.1, 0.1, 0.1, 0.1, 0.3]; Math.random = () => window.__r.length ? window.__r.shift() : 0.9; }")
+    page.evaluate("() => { window.PATH_DRILL_GAP_MS = 0; window.__r = [0.1, 0.1, 0.1, 0.1, 0.3]; Math.random = () => window.__r.length ? window.__r.shift() : 0.9; }")
     page.click("#voiceDrill summary")
     page.click("#drillStart")
     assert page.inner_text("#drillSay") == "“yes”"
@@ -850,7 +850,7 @@ def test_training_asks_for_command_words_and_for_silence(browser_page, app_url):
 
 def test_voice_drill_scores_and_saves_each_recording(browser_page, app_url):
     page = voice_page(browser_page, app_url, 0)
-    page.evaluate("() => { Math.random = () => 0.9; }")          # a move this time
+    page.evaluate("() => { window.PATH_DRILL_GAP_MS = 0; Math.random = () => 0.9; }")   # a move this time
     page.click("#voiceDrill summary")
     page.click("#drillStart")
     target = page.inner_text("#drillSay")
@@ -863,6 +863,27 @@ def test_voice_drill_scores_and_saves_each_recording(browser_page, app_url):
     assert len(saved) == 1 and "source=drill" in saved[0]
     page.click("#drillStart")
     assert "1 of 1" in page.inner_text("#voiceHeard")
+    assert page.errors == []
+
+
+def test_voice_drill_saves_one_recording_per_item_begun_after_it_was_shown(browser_page, app_url):
+    page = voice_page(browser_page, app_url, 0)
+    page.evaluate("() => { window.PATH_DRILL_GAP_MS = 300; Math.random = () => 0.9; }")
+    page.click("#voiceDrill summary")
+    page.click("#drillStart")
+    assert page.inner_text("#drillSay") == "…", "a pause before the first item"
+    page.evaluate("() => window.pathVoiceUtterance()")                      # spoken during the pause
+    assert page.inner_text("#voiceHeard").startswith("· not saved")
+    page.wait_for_function("document.getElementById('drillSay').textContent !== '…'")
+    page.evaluate("() => window.__say.push(() => document.getElementById('drillSay').textContent)")
+    page.evaluate("() => window.pathVoiceUtterance(undefined, Date.now() - 5000)")   # begun before it showed
+    assert page.inner_text("#voiceHeard").startswith("· not saved")
+    page.evaluate("() => window.pathVoiceUtterance()")
+    assert "✓" in page.inner_text("#voiceHeard")
+    page.evaluate("() => window.pathVoiceUtterance()")                      # "…Schach", a second piece
+    assert page.inner_text("#voiceHeard").startswith("· not saved")
+    saved = [c for c in page.evaluate("window.__calls") if "/sample?" in c]
+    assert len(saved) == 1
     assert page.errors == []
 
 
