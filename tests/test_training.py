@@ -10,18 +10,18 @@ PUZZLES = json.loads(TEXT[TEXT.index("["):TEXT.rindex("]") + 1])
 
 
 def test_every_puzzle_line_is_legal_and_long_enough():
-    assert len(PUZZLES) > 500
+    assert len(PUZZLES) > 3000
     assert len({p["id"] for p in PUZZLES}) == len(PUZZLES)
     for p in PUZZLES:
         board = chess.Board(p["fen"])
         for san in p["line"]:
             board.push_san(san)
-        assert len(p["line"]) >= 5 and 1000 <= p["r"] < 2800
+        assert len(p["line"]) >= 5 and 700 <= p["r"] < 3000
 
 
 def test_bands_cover_the_range():
     bands = {p["r"] // 100 for p in PUZZLES}
-    assert set(range(10, 28)) <= bands
+    assert set(range(7, 30)) <= bands
 
 
 def open_today(page, app_url):
@@ -119,3 +119,18 @@ def test_a_miss_comes_back_two_days_later_and_leaves_when_right(browser_page, ap
         {detail: {sessionId: 'training-2099-01-03', stepId: id, clean: true}}))""", first["id"])
     t = page.evaluate("window.pathStore.state.training")
     assert first["id"] not in t["missed"] and t["level"] == 1460
+
+
+def test_harder_and_easier_move_the_set_by_200(browser_page, app_url):
+    page = browser_page
+    open_today(page, app_url)
+    page.click("#trainingDiff [data-diff='200']")
+    page.wait_for_function("document.querySelector('#trainingDiff b') && "
+                           "document.querySelector('#trainingDiff b').innerText === 'Harder'")
+    s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
+    assert "near 1700" in s["title"]
+    assert all(abs(int(st["title"].split()[-1]) - 1700) <= 100 for st in s["steps"])
+    page.click("#trainingDiff [data-diff='-200']")
+    page.wait_for_function("document.querySelector('#trainingDiff b').innerText === 'Easier'")
+    s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
+    assert all(abs(int(st["title"].split()[-1]) - 1300) <= 100 for st in s["steps"])

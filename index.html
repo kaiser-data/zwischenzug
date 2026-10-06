@@ -202,14 +202,18 @@
     font-size: .85rem;
     background: var(--paper);
   }
+  /* The board grows with the window: as tall as the screen allows (header and the button row
+     stay in view), 520 px at least, 980 px at most. On the Board tab the page widens with it. */
+  :root { --board: clamp(520px, calc(100vh - 310px), 980px); }
   .board-layout {
     display: grid;
-    grid-template-columns: minmax(280px, 520px) 1fr;
+    grid-template-columns: minmax(280px, var(--board)) minmax(340px, 1fr);
     gap: 28px;
     align-items: start;
   }
   @media (max-width: 860px) { .board-layout { grid-template-columns: 1fr; } }
-  .board-frame { width: min(100%, 520px); }
+  .board-frame { width: min(100%, var(--board)); }
+  .wrap:has(#panel-session:not(.hidden)) { max-width: max(1180px, min(96vw, calc(var(--board) + 760px))); }
   /* Solved: a check pops on the board, the board glows, and a clean first try throws confetti. */
   .win-layer { position: fixed; pointer-events: none; z-index: 50; display: grid; place-items: center; overflow: visible; }
   .win-check { width: 34%; aspect-ratio: 1; border-radius: 50%; background: rgba(34, 139, 74, .92); color: #fff;

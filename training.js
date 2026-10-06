@@ -2,12 +2,14 @@
 // solved the Zwischenzug way — the whole line, both sides, to the last capture, then Lock.
 // Right on the first try: level +40. A miss on the way: level −40. The day's set stays fixed.
 // A missed position comes back as "Again" two days later until it is right on the first try;
-// repeats do not move the level. State lives in the store (state.training) and syncs.
+// repeats do not move the level. Difficulty: easier / at level / harder picks around level −200 / 0 / +200.
+// State lives in the store (state.training) and syncs.
 (function () {
   const PUZZLES = window.PATH_PUZZLES || [];
   if (!PUZZLES.length) return;
-  const START = 1500, STEP = 40, MIN = 800, MAX = 2800, PER_DAY = 3, NEAR = 24, AGAIN_AFTER = 2;
+  const START = 1500, STEP = 40, MIN = 800, MAX = 2800, PER_DAY = 3, NEAR = 100, AGAIN_AFTER = 2;
   const COUNTS = [3, 5, 10];
+  const DIFFS = [[-200, "Easier"], [0, "At level"], [200, "Harder"]];
   let store = null;
   let redrawBar = function () {};
 
@@ -71,7 +73,7 @@
     return {
       id: "training-" + date,
       group: "Training",
-      title: "Today · " + list.length + " positions near " + (t.level || START) + (again ? " (" + again + " again)" : ""),
+      title: "Today · " + list.length + " positions near " + ((t.level || START) + t.diff) + (again ? " (" + again + " again)" : ""),
       date: date,
       result: "",
       event: "Training",
@@ -89,6 +91,7 @@
     t.done = t.done || {};
     t.missed = t.missed || {};
     if (COUNTS.indexOf(t.perDay) < 0) t.perDay = PER_DAY;
+    if (!DIFFS.some(function (d) { return d[0] === t.diff; })) t.diff = 0;
     return t;
   }
 
@@ -97,7 +100,7 @@
     const date = today();
     if (!t.days[date] || !t.days[date].length) {
       const again = due(t, date, t.perDay);
-      t.days[date] = again.concat(pick(t.level || START, t.done, date, t.perDay - again.length));
+      t.days[date] = again.concat(pick((t.level || START) + t.diff, t.done, date, t.perDay - again.length));
     }
     if (!t.days[date].length) return null;
     const s = sessionFor(t, date);
@@ -118,6 +121,12 @@
   function setCount(n) {
     const t = state();
     t.perDay = COUNTS.indexOf(n) >= 0 ? n : PER_DAY;
+    return newSet();
+  }
+
+  function setDiff(n) {
+    const t = state();
+    t.diff = DIFFS.some(function (d) { return d[0] === n; }) ? n : 0;
     return newSet();
   }
 
@@ -156,11 +165,20 @@
         : 'Set your rating to get positions at your level. <a href="#" id="trainingSet">Set rating</a>') +
         '<br><span id="trainingCount">' + t.perDay + " a day</span> · " + COUNTS.filter(function (n) { return n !== t.perDay; })
           .map(function (n) { return '<a href="#" data-count="' + n + '">' + n + "</a>"; }).join(" · ") +
+        '<br><span id="trainingDiff">' + DIFFS.map(function (d) {
+          return d[0] === t.diff ? "<b>" + d[1] + "</b>" : '<a href="#" data-diff="' + d[0] + '">' + d[1] + "</a>";
+        }).join(" · ") + "</span>" +
         (waiting ? " · " + waiting + (waiting === 1 ? " miss comes" : " misses come") + " back to repeat" : "");
       bar.querySelectorAll("[data-count]").forEach(function (a) {
         a.addEventListener("click", function (e) {
           e.preventDefault();
           setCount(parseInt(a.dataset.count, 10)).then(reloadToday);
+        });
+      });
+      bar.querySelectorAll("[data-diff]").forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          setDiff(parseInt(a.dataset.diff, 10)).then(reloadToday);
         });
       });
       document.getElementById("trainingSet").addEventListener("click", function (e) {
@@ -213,6 +231,7 @@
     },
     setLevel: setLevel,
     setCount: setCount,
+    setDiff: setDiff,
     // Tests: pretend today is another day.
     _today: function (fn) { today = fn; }
   };
