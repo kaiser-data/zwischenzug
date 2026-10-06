@@ -1,23 +1,35 @@
-// Training by level: each day three Lichess puzzles near the player's level (sessions/puzzles.js),
+// Training by level: each day a few Lichess puzzles near the player's level (sessions/puzzles.js),
 // solved the Zwischenzug way — the whole line, both sides, to the last capture, then Lock.
-// Right on the first try: level +40. A miss on the way: level −40. The day's three stay fixed.
-// State lives in the store (state.training), so it syncs like the rest of the progress.
+// Right on the first try: level +40. A miss on the way: level −40. The day's set stays fixed.
+// A missed position comes back as "Again" two days later until it is right on the first try;
+// repeats do not move the level. State lives in the store (state.training) and syncs.
 (function () {
   const PUZZLES = window.PATH_PUZZLES || [];
   if (!PUZZLES.length) return;
-  const START = 1500, STEP = 40, MIN = 800, MAX = 2800, PER_DAY = 3, NEAR = 12;
+  const START = 1500, STEP = 40, MIN = 800, MAX = 2800, PER_DAY = 3, NEAR = 24, AGAIN_AFTER = 2;
+  const COUNTS = [3, 5, 10];
   let store = null;
   let redrawBar = function () {};
 
-  function today() {
+  let today = function () {
     const d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  }
+  };
 
   function clamp(n) { return Math.max(MIN, Math.min(MAX, Math.round(n))); }
 
+  function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / 86400000); }
+
+  // Misses due again (oldest first): at most one in three of the day's positions.
+  function due(t, date, count) {
+    return Object.keys(t.missed).filter(function (id) { return daysBetween(t.missed[id], date) >= AGAIN_AFTER && byId(id); })
+      .sort(function (a, b) { return t.missed[a] < t.missed[b] ? -1 : t.missed[a] > t.missed[b] ? 1 : (a < b ? -1 : 1); })
+      .slice(0, Math.max(1, Math.floor(count / 3)));
+  }
+
   // Stable for a given day and level: the NEAR closest unseen puzzles, shuffled by the date.
-  function pick(level, done, date) {
+  function pick(level, done, date, count) {
+    count = count || PER_DAY;
     let seed = 0;
     for (let i = 0; i < date.length; i++) seed = (seed * 31 + date.charCodeAt(i)) >>> 0;
     const pool = PUZZLES.filter(function (p) { return !(p.id in done); })
@@ -28,20 +40,20 @@
       const j = seed % (i + 1);
       const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
     }
-    return pool.slice(0, PER_DAY).sort(function (a, b) { return a.r - b.r; }).map(function (p) { return p.id; });
+    return pool.slice(0, count).sort(function (a, b) { return a.r - b.r; }).map(function (p) { return p.id; });
   }
 
   function byId(id) { return PUZZLES.find(function (p) { return p.id === id; }); }
 
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
-  function step(p, i) {
+  function step(p, i, again) {
     const side = p.fen.split(" ")[1] === "w" ? "White" : "Black";
     const themes = p.themes.length ? " Themes: " + p.themes.map(esc).join(", ") + "." : "";
     return {
       id: p.id,
-      name: "Position " + (i + 1),
-      title: side + " to move · rated " + p.r,
+      name: again ? "Again" : "Position " + (i + 1),
+      title: side + " to move · rated " + p.r + (again ? " · missed on " + again : ""),
       prompt: "Calculate first, without moving pieces. Then write the whole line, both sides, to the last capture — and Lock.",
       fen: p.fen,
       type: "solve",
@@ -54,18 +66,18 @@
   }
 
   function sessionFor(t, date) {
-    const ids = t.days[date];
-    const list = ids.map(byId).filter(Boolean);
+    const list = t.days[date].map(byId).filter(Boolean);
+    const again = list.filter(function (p) { return p.id in t.missed; }).length;
     return {
       id: "training-" + date,
       group: "Training",
-      title: "Today · " + list.length + " positions near " + (t.level || START),
+      title: "Today · " + list.length + " positions near " + (t.level || START) + (again ? " (" + again + " again)" : ""),
       date: date,
       result: "",
       event: "Training",
       startFen: list[0].fen,
       logNote: "",
-      steps: list.map(step)
+      steps: list.map(function (p, i) { return step(p, i, t.missed[p.id] || ""); })
     };
   }
 
@@ -75,13 +87,18 @@
     const t = s.training;
     t.days = t.days || {};
     t.done = t.done || {};
+    t.missed = t.missed || {};
+    if (COUNTS.indexOf(t.perDay) < 0) t.perDay = PER_DAY;
     return t;
   }
 
   function register() {
     const t = state();
     const date = today();
-    if (!t.days[date] || !t.days[date].length) t.days[date] = pick(t.level || START, t.done, date);
+    if (!t.days[date] || !t.days[date].length) {
+      const again = due(t, date, t.perDay);
+      t.days[date] = again.concat(pick(t.level || START, t.done, date, t.perDay - again.length));
+    }
     if (!t.days[date].length) return null;
     const s = sessionFor(t, date);
     window.PATH_SESSIONS = window.PATH_SESSIONS || {};
@@ -95,12 +112,30 @@
   function setLevel(n) {
     const t = state();
     t.level = clamp(n);
-    // A new level gives a new set today, unless one of today's is already solved.
+    return newSet();
+  }
+
+  function setCount(n) {
+    const t = state();
+    t.perDay = COUNTS.indexOf(n) >= 0 ? n : PER_DAY;
+    return newSet();
+  }
+
+  function newSet() {
+    const t = state();
+    // A new level or count gives a new set today, unless one of today's is already solved.
     const date = today();
     const started = (t.days[date] || []).some(function (id) { return id in t.done; });
     if (!started) delete t.days[date];
     register();
     return store.commit();
+  }
+
+  function reloadToday() {
+    const u = new URL(location.href);
+    u.searchParams.set("session", "training-" + today());
+    history.replaceState(null, "", u.toString());
+    location.reload();             // the board reads the new set on load
   }
 
   function levelBar() {
@@ -115,20 +150,25 @@
       const t = state();
       const id = new URLSearchParams(location.search).get("session") || (document.getElementById("sessionPick") || {}).value || "";
       bar.classList.toggle("hidden", id.indexOf("training-") !== 0);
-      bar.innerHTML = t.level
+      const waiting = Object.keys(t.missed).length;
+      bar.innerHTML = (t.level
         ? "Your level: <b>" + t.level + "</b>. Right on the first try +" + STEP + ", a miss −" + STEP + '. <a href="#" id="trainingSet">Change</a>'
-        : 'Set your rating to get positions at your level. <a href="#" id="trainingSet">Set rating</a>';
+        : 'Set your rating to get positions at your level. <a href="#" id="trainingSet">Set rating</a>') +
+        '<br><span id="trainingCount">' + t.perDay + " a day</span> · " + COUNTS.filter(function (n) { return n !== t.perDay; })
+          .map(function (n) { return '<a href="#" data-count="' + n + '">' + n + "</a>"; }).join(" · ") +
+        (waiting ? " · " + waiting + (waiting === 1 ? " miss comes" : " misses come") + " back to repeat" : "");
+      bar.querySelectorAll("[data-count]").forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          setCount(parseInt(a.dataset.count, 10)).then(reloadToday);
+        });
+      });
       document.getElementById("trainingSet").addEventListener("click", function (e) {
         e.preventDefault();
         const raw = window.prompt("Your rating (FIDE, or Lichess classical/rapid):", t.level || START);
         const n = parseInt(raw, 10);
         if (!n || n < 400 || n > 3200) return;
-        setLevel(n).then(function () {
-          const u = new URL(location.href);
-          u.searchParams.set("session", "training-" + today());
-          history.replaceState(null, "", u.toString());
-          location.reload();             // the board reads the new set on load
-        });
+        setLevel(n).then(reloadToday);
       });
     }
     show();
@@ -141,9 +181,14 @@
     const d = e.detail || {};
     if (!store || !d.sessionId || d.sessionId.indexOf("training-") !== 0) return;
     const t = state();
-    if (d.stepId in t.done) return;          // a redo does not move the level twice
-    t.done[d.stepId] = d.clean ? 1 : 0;
-    t.level = clamp((t.level || START) + (d.clean ? STEP : -STEP));
+    if (d.stepId in t.missed && d.stepId in t.done && t.missed[d.stepId] !== today()) {
+      // A repeat: right on the first try clears it; another miss brings it back in two days.
+      if (d.clean) delete t.missed[d.stepId]; else t.missed[d.stepId] = today();
+    } else if (!(d.stepId in t.done)) {     // a redo the same day does not move the level twice
+      t.done[d.stepId] = d.clean ? 1 : 0;
+      t.level = clamp((t.level || START) + (d.clean ? STEP : -STEP));
+      if (!d.clean) t.missed[d.stepId] = today();
+    } else return;
     store.commit();
     redrawBar();
   });
@@ -166,6 +211,9 @@
       }
       levelBar();
     },
-    setLevel: setLevel
+    setLevel: setLevel,
+    setCount: setCount,
+    // Tests: pretend today is another day.
+    _today: function (fn) { today = fn; }
   };
 })();
