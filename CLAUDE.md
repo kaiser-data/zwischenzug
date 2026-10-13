@@ -35,11 +35,14 @@ His words — use them, don't replace them:
 
 ## Next
 
+00. Training focus sets (Zwischenzug · Long lines · Defence · Endgame, 3–20 a day) are pushed but not on Netlify — he runs the deploy (HANDOFF §8 0000).
+00a. Voice vs Lichess: measure Vosk + Lichess matcher vs tiny-b on his 79 DE clips, then build the top gain (likely nearest legal move + choice arrows) (HANDOFF §8 0000a).
+00b. Aagaard ch.7 (30 exercises) half transcribed in `books/ch7/` → check page → his confirmation → drills (HANDOFF §8 0000b).
 0. Voice: he tries the faster voice + "no"/"yes" on the phone; fine-tune GPU run on Modal waits for his OK (HANDOFF §8 000/000a, §3 "Voice v2 — as built").
 1. He solves Aagaard 6.1–6.6 on the Board / Drills tabs; read his Aagaard log results when he reports.
 2. New Lichess URL → HANDOFF §5A.
 3. `scripts/author_session.py --json` → draft session skeleton (keys still by hand).
-4. Next Aagaard chapter only when he asks → HANDOFF §5B.
+4. Chapter after 7 only when he asks → HANDOFF §5B.
 
 ## Not yet
 
