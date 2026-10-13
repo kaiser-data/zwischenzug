@@ -35,7 +35,7 @@ His words — use them, don't replace them:
 
 ## Next
 
-00. Hosted copy moved to Cloudflare Pages (https://zwischenzug.pages.dev); he runs `railway variables --set SITE_URL=https://zwischenzug.pages.dev` (blocked from here), then new `--me` links (HANDOFF §8 0000).
+00. Hosted copy moved to Cloudflare Pages (https://zwischenzug.pages.dev); SITE_URL switched 2026-10-14; ask whether sign-in, voice and sync work there (HANDOFF §8 0000).
 00a. Voice vs Lichess measured: about even. Two fixes approved, build them next: looser gate for clean legal moves, ask instead of guessing a rank (HANDOFF §8 0000a).
 00b. Aagaard ch.7 (30 exercises): `books/ch7/check.html` waits for his confirmation, then build + bundle (HANDOFF §8 0000b).
 0. Voice: he tries the faster voice + "no"/"yes" on the phone; fine-tune GPU run on Modal waits for his OK (HANDOFF §8 000/000a, §3 "Voice v2 — as built").
