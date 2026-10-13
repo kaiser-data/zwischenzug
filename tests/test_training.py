@@ -131,6 +131,39 @@ def test_harder_and_easier_move_the_set_by_200(browser_page, app_url):
     assert "near 1700" in s["title"]
     assert all(abs(int(st["title"].split()[-1]) - 1700) <= 100 for st in s["steps"])
     page.click("#trainingDiff [data-diff='-200']")
-    page.wait_for_function("document.querySelector('#trainingDiff b').innerText === 'Easier'")
+    page.wait_for_function("document.querySelector('#trainingDiff b') && "
+                           "document.querySelector('#trainingDiff b').innerText === 'Easier'")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     assert all(abs(int(st["title"].split()[-1]) - 1300) <= 100 for st in s["steps"])
+
+
+def test_focus_sets_exist_in_every_band():
+    for letter in "zlde":
+        tagged = [p for p in PUZZLES if letter in p.get("f", "")]
+        assert {p["r"] // 100 for p in tagged} >= set(range(9, 28)), letter
+
+
+def test_focus_gives_only_tagged_positions(browser_page, app_url):
+    page = browser_page
+    open_today(page, app_url)
+    page.click("#trainingFocus [data-focus='z']")
+    page.wait_for_function("document.querySelector('#trainingFocus b') && "
+                           "document.querySelector('#trainingFocus b').innerText === 'Zwischenzug'")
+    s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
+    tagged = {p["id"] for p in PUZZLES if "z" in p["f"]}
+    assert "Zwischenzug" in s["title"] and all(st["id"] in tagged for st in s["steps"])
+
+
+def test_more_after_the_day_keeps_what_is_solved(browser_page, app_url):
+    page = browser_page
+    s = open_today(page, app_url)
+    first = s["steps"][0]
+    page.fill("input[name=line]", " ".join(first["solve"]["line"]))
+    page.click("#boardLock")
+    page.wait_for_selector("#boardKey.show")
+    page.click("#trainingLevel [data-count='15']")
+    page.wait_for_function("document.getElementById('trainingCount') && "
+                           "document.getElementById('trainingCount').innerText.startsWith('15 a day')")
+    s2 = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
+    ids = [st["id"] for st in s2["steps"]]
+    assert len(ids) == 15 and len(set(ids)) == 15 and first["id"] in ids

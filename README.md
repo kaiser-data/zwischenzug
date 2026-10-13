@@ -96,11 +96,12 @@ Each slow game is one JSON file in `sessions/`. The board is generic.
 
 ## Training by level
 
-Each day a few positions near your level, from **3353 Lichess puzzles** (CC0) rated 700–2999. Only lines of at least five plies count, so there is something to calculate. There are no one-movers and no short mates.
+Each day a few positions near your level, from **4647 Lichess puzzles** (CC0) rated 700–2999. Only lines of at least five plies count, so there is something to calculate. There are no one-movers and no short mates.
 
 - Write the whole line, both sides, to the last capture, then **Lock**. Stopping one ply early is the leak this trains.
 - Right on the first try: level **+40**. A miss on the way: **−40**.
-- **3, 5 or 10** a day; **Easier · At level · Harder** picks around level −200 / 0 / +200.
+- **3, 5, 10, 15 or 20** a day; **Easier · At level · Harder** picks around level −200 / 0 / +200. A bigger number after the day's set keeps what is solved and adds new ones.
+- **Focus:** Mixed · **Zwischenzug** (Lichess theme intermezzo) · **Long lines** (four or more moves of your own) · **Defence** (defensive or quiet move) · **Endgame**. Each focus has at least 40 puzzles per 100-point band.
 - A missed position comes back as **Again** two days later, until it is right on the first try. Repeats do not move the level.
 
 ## Voice

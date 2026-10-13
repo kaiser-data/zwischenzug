@@ -3,13 +3,15 @@
 // Right on the first try: level +40. A miss on the way: level −40. The day's set stays fixed.
 // A missed position comes back as "Again" two days later until it is right on the first try;
 // repeats do not move the level. Difficulty: easier / at level / harder picks around level −200 / 0 / +200.
+// Focus: mixed, or only puzzles tagged zwischenzug / long line / defence / endgame (`f` in puzzles.js).
 // State lives in the store (state.training) and syncs.
 (function () {
   const PUZZLES = window.PATH_PUZZLES || [];
   if (!PUZZLES.length) return;
   const START = 1500, STEP = 40, MIN = 800, MAX = 2800, PER_DAY = 3, NEAR = 100, AGAIN_AFTER = 2;
-  const COUNTS = [3, 5, 10];
+  const COUNTS = [3, 5, 10, 15, 20];
   const DIFFS = [[-200, "Easier"], [0, "At level"], [200, "Harder"]];
+  const FOCUSES = [["", "Mixed"], ["z", "Zwischenzug"], ["l", "Long lines"], ["d", "Defence"], ["e", "Endgame"]];
   let store = null;
   let redrawBar = function () {};
 
@@ -30,11 +32,11 @@
   }
 
   // Stable for a given day and level: the NEAR closest unseen puzzles, shuffled by the date.
-  function pick(level, done, date, count) {
-    count = count || PER_DAY;
+  function pick(level, done, date, count, focus) {
+    if (count === undefined) count = PER_DAY;
     let seed = 0;
     for (let i = 0; i < date.length; i++) seed = (seed * 31 + date.charCodeAt(i)) >>> 0;
-    const pool = PUZZLES.filter(function (p) { return !(p.id in done); })
+    const pool = PUZZLES.filter(function (p) { return !(p.id in done) && (!focus || (p.f || "").indexOf(focus) >= 0); })
       .sort(function (a, b) { return Math.abs(a.r - level) - Math.abs(b.r - level) || (a.id < b.id ? -1 : 1); })
       .slice(0, NEAR);
     for (let i = pool.length - 1; i > 0; i--) {
@@ -73,7 +75,7 @@
     return {
       id: "training-" + date,
       group: "Training",
-      title: "Today · " + list.length + " positions near " + ((t.level || START) + t.diff) + (again ? " (" + again + " again)" : ""),
+      title: "Today · " + (t.focus ? focusName(t.focus) + " · " : "") + list.length + " positions near " + ((t.level || START) + t.diff) + (again ? " (" + again + " again)" : ""),
       date: date,
       result: "",
       event: "Training",
@@ -81,6 +83,11 @@
       logNote: "",
       steps: list.map(function (p, i) { return step(p, i, t.missed[p.id] || ""); })
     };
+  }
+
+  function focusName(f) {
+    const hit = FOCUSES.find(function (x) { return x[0] === f; });
+    return hit ? hit[1] : "";
   }
 
   function state() {
@@ -92,6 +99,7 @@
     t.missed = t.missed || {};
     if (COUNTS.indexOf(t.perDay) < 0) t.perDay = PER_DAY;
     if (!DIFFS.some(function (d) { return d[0] === t.diff; })) t.diff = 0;
+    if (!FOCUSES.some(function (f) { return f[0] === t.focus; })) t.focus = "";
     return t;
   }
 
@@ -100,7 +108,7 @@
     const date = today();
     if (!t.days[date] || !t.days[date].length) {
       const again = due(t, date, t.perDay);
-      t.days[date] = again.concat(pick((t.level || START) + t.diff, t.done, date, t.perDay - again.length));
+      t.days[date] = again.concat(pick((t.level || START) + t.diff, t.done, date, t.perDay - again.length, t.focus));
     }
     if (!t.days[date].length) return null;
     const s = sessionFor(t, date);
@@ -130,12 +138,26 @@
     return newSet();
   }
 
+  function setFocus(f) {
+    const t = state();
+    t.focus = FOCUSES.some(function (x) { return x[0] === f; }) ? f : "";
+    return newSet();
+  }
+
   function newSet() {
     const t = state();
-    // A new level or count gives a new set today, unless one of today's is already solved.
+    // A new level, count, difficulty or focus refills today's set: positions already solved today stay,
+    // the unsolved ones are picked again. So after the day's 3, "10" gives 7 more.
     const date = today();
-    const started = (t.days[date] || []).some(function (id) { return id in t.done; });
-    if (!started) delete t.days[date];
+    const solved = (t.days[date] || []).filter(function (id) {
+      return id in t.done && !(id in t.missed && t.missed[id] !== date);
+    });
+    const again = due(t, date, t.perDay).filter(function (id) { return solved.indexOf(id) < 0; })
+      .slice(0, Math.max(0, t.perDay - solved.length));
+    const done = Object.assign({}, t.done);
+    again.forEach(function (id) { done[id] = 1; });
+    t.days[date] = solved.concat(again, pick((t.level || START) + t.diff, done, date,
+      Math.max(0, t.perDay - solved.length - again.length), t.focus));
     register();
     return store.commit();
   }
@@ -168,6 +190,9 @@
         '<br><span id="trainingDiff">' + DIFFS.map(function (d) {
           return d[0] === t.diff ? "<b>" + d[1] + "</b>" : '<a href="#" data-diff="' + d[0] + '">' + d[1] + "</a>";
         }).join(" · ") + "</span>" +
+        '<br><span id="trainingFocus">' + FOCUSES.map(function (f) {
+          return f[0] === t.focus ? "<b>" + f[1] + "</b>" : '<a href="#" data-focus="' + f[0] + '">' + f[1] + "</a>";
+        }).join(" · ") + "</span>" +
         (waiting ? " · " + waiting + (waiting === 1 ? " miss comes" : " misses come") + " back to repeat" : "");
       bar.querySelectorAll("[data-count]").forEach(function (a) {
         a.addEventListener("click", function (e) {
@@ -179,6 +204,12 @@
         a.addEventListener("click", function (e) {
           e.preventDefault();
           setDiff(parseInt(a.dataset.diff, 10)).then(reloadToday);
+        });
+      });
+      bar.querySelectorAll("[data-focus]").forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          setFocus(a.dataset.focus).then(reloadToday);
         });
       });
       document.getElementById("trainingSet").addEventListener("click", function (e) {
@@ -232,6 +263,7 @@
     setLevel: setLevel,
     setCount: setCount,
     setDiff: setDiff,
+    setFocus: setFocus,
     // Tests: pretend today is another day.
     _today: function (fn) { today = fn; }
   };
