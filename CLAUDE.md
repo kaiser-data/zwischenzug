@@ -35,9 +35,9 @@ His words — use them, don't replace them:
 
 ## Next
 
-00. Training focus sets (Zwischenzug · Long lines · Defence · Endgame, 3–20 a day) are pushed but not on Netlify — he runs the deploy (HANDOFF §8 0000).
-00a. Voice vs Lichess: measure Vosk + Lichess matcher vs tiny-b on his 79 DE clips, then build the top gain (likely nearest legal move + choice arrows) (HANDOFF §8 0000a).
-00b. Aagaard ch.7 (30 exercises) half transcribed in `books/ch7/` → check page → his confirmation → drills (HANDOFF §8 0000b).
+00. Hosted copy moved to Cloudflare Pages (https://zwischenzug.pages.dev); sign-in waits for his OK to switch Railway `SITE_URL` (HANDOFF §8 0000).
+00a. Voice vs Lichess measured: about even. Two fixes proposed (looser gate for clean legal moves, ask instead of guessing a rank) — build on his OK (HANDOFF §8 0000a).
+00b. Aagaard ch.7 (30 exercises): `books/ch7/check.html` waits for his confirmation, then build + bundle (HANDOFF §8 0000b).
 0. Voice: he tries the faster voice + "no"/"yes" on the phone; fine-tune GPU run on Modal waits for his OK (HANDOFF §8 000/000a, §3 "Voice v2 — as built").
 1. He solves Aagaard 6.1–6.6 on the Board / Drills tabs; read his Aagaard log results when he reports.
 2. New Lichess URL → HANDOFF §5A.

@@ -1,0 +1,5 @@
+# Cloudflare Pages project for the hosted copy. Deploy from this folder (functions/ is picked up here):
+#   python3 scripts/build_site.py --cloudflare && cd cloudflare && npx wrangler pages deploy
+name = "zwischenzug"
+pages_build_output_dir = "../dist"
+compatibility_date = "2026-09-01"

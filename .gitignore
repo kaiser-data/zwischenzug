@@ -18,3 +18,4 @@ dist/
 .netlify
 # Invite pages: one-time sign-in links (scripts/invite.py)
 invites/
+.wrangler/

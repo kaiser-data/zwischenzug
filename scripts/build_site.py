@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Build the hosted site into dist/ for Netlify: public files only, /api proxied to Railway.
+"""Build the hosted site into dist/ for Netlify or Cloudflare Pages: public files only, /api proxied to Railway.
 
     python3 scripts/build_site.py [--api https://api-production-3edf.up.railway.app]
     netlify deploy --prod --dir dist
+    python3 scripts/build_site.py --cloudflare && cd cloudflare && npx wrangler pages deploy
+      (Cloudflare: no _redirects; cloudflare/functions/api/[[path]].js forwards /api/* to Railway)
 
 The private Aagaard bundle is never copied: the hosted page loads it from /api/drills/bundle.js,
 which only the owner's session can open. The build refuses if anything private reaches dist/.
@@ -74,6 +76,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--api", default=API)
     p.add_argument("--google-client-id", default=GOOGLE_CLIENT_ID)
+    p.add_argument("--cloudflare", action="store_true", help="Cloudflare Pages: the proxy is a Pages Function")
     a = p.parse_args()
     if DIST.exists():
         shutil.rmtree(DIST)
@@ -89,7 +92,8 @@ def main() -> None:
     (DIST / "config.js").write_text(f"window.PATH_GOOGLE_CLIENT_ID = {json.dumps(a.google_client_id)};\n")
     version = hashlib.sha256(b"".join((DIST / f).read_bytes() for f in FILES + WEB + ["index.html", "config.js"])).hexdigest()[:12]
     (DIST / "sw.js").write_text((ROOT / "web" / "sw.js").read_text().replace("__BUILD__", version))
-    (DIST / "_redirects").write_text(f"/api/*  {a.api.rstrip('/')}/api/:splat  200\n")
+    if not a.cloudflare:
+        (DIST / "_redirects").write_text(f"/api/*  {a.api.rstrip('/')}/api/:splat  200\n")
     (DIST / "_headers").write_text("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: same-origin\n"
                                    "  Permissions-Policy: microphone=(self)\n/sw.js\n  Cache-Control: no-cache\n")
     check(DIST)
