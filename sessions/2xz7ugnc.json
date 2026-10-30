@@ -1,0 +1,415 @@
+{
+  "id": "2xz7ugnc",
+  "url": "https://lichess.org/2xz7ugnc",
+  "player": "nico",
+  "title": "Café game vs Martin · you White · London vs St. George",
+  "date": "2026-10-30 18:00",
+  "result": "0-1",
+  "event": "Slow game in a café · Nico (White) vs Martin (Black, FIDE 2171) · mated on move 31",
+  "startFen": "r2qkb1r/1bpnppp1/p2p3p/1p6/3P4/2PBPNP1/PP1N1PP1/R2QK2R w KQkq - 0 10",
+  "logNote": "Nico's game: three set-up moments (a4 against b5, castle before Rh5, keep c3 covered) and three tactics in the side lines (the check that saves a piece, the rook trap, pin first then take). By 22.Bg6 the game was already lost.",
+  "steps": [
+    {
+      "id": "lever",
+      "name": "1 Set-up: a4",
+      "title": "Move 10 · White to move · Black's pawn on b5 sticks out",
+      "prompt": "Your pieces are out (Bf4–g3, e3, c3, Bd3, Nbd2, Nf3). Now look at Black's pawn on b5: it stands far forward. Which of your pawns can attack it?",
+      "fen": "r2qkb1r/1bpnppp1/p2p3p/1p6/3P4/2PBPNP1/PP1N1PP1/R2QK2R w KQkq - 0 10",
+      "questions": [
+        {
+          "name": "gain",
+          "type": "select",
+          "label": "1.1 After 10.a4 c6, Black holds b5. What did a4 still get you?",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "both",
+              "label": "c6 blocks the b7 bishop, and the a-file opens for my rook"
+            },
+            {
+              "value": "pawn",
+              "label": "a pawn"
+            },
+            {
+              "value": "nothing",
+              "label": "nothing"
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "a4",
+          "label": "10.a4",
+          "write": true,
+          "given": 0,
+          "ask": "your pawn move against b5",
+          "mustPlay": [
+            "a4"
+          ],
+          "alts": [
+            [
+              "c4"
+            ]
+          ],
+          "key": "<p class='ok'><b>10.a4!</b> A pawn that sticks out is attacked with a pawn. The engine wanted a4 on moves 5, 6, 7, 8, 10 and 11. (10.c4 does the same job from the other side.) In the game you played 10.Qc2, and the b5 pawn later marched on with …b4 towards your king.</p>"
+        },
+        {
+          "id": "c6",
+          "label": "10.a4 c6 · Black holds b5",
+          "mustPlay": [
+            "a4",
+            "c6",
+            "axb5",
+            "axb5",
+            "O-O",
+            "e6",
+            "Qb3"
+          ],
+          "key": "<p class='ok'><b>10…c6</b> is Black's best answer: b5 is held. But look what it cost. The bishop on b7 now looks into its own pawn on c6, and after 11.axb5 axb5 your rook on a1 has an open file. The plan is simple: castle, 13.Qb3 at b5, then c4 to hit it again. White is a little better, without risking anything.</p>"
+        }
+      ],
+      "key": "<p><b>Set-up idea:</b> In the London (d4, Bf4, e3, c3, Bd3, Nbd2, Nf3) your pieces are out by move 8. Then ask: <i>which Black pawn can my pawns attack?</i> Here: b5, with a4. Even when Black defends it, he has to put a pawn where it gets in his own way.</p>"
+    },
+    {
+      "id": "king",
+      "name": "2 Set-up: king first",
+      "title": "Move 13 · White to move · your king is still on e1",
+      "prompt": "Black just played …c5, so the c-file will open soon. Your rook on h1 has an open h-file. Find the move that makes your position safe. In the game you played 13.Rh5.",
+      "fen": "r2qkb1r/1b1n1pp1/p3p2p/1ppp4/3P4/2PBPNP1/PPQN1PP1/R3K2R w KQkq - 0 13",
+      "questions": [
+        {
+          "name": "rook",
+          "label": "2.1 What does the rook on h5 attack after 13.Rh5?",
+          "type": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "nothing",
+              "label": "nothing: d5 is guarded twice"
+            },
+            {
+              "value": "d5",
+              "label": "the d5 pawn"
+            },
+            {
+              "value": "king",
+              "label": "Black's king"
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "castle",
+          "label": "13.O-O",
+          "write": true,
+          "given": 0,
+          "ask": "make your king safe",
+          "mustPlay": [
+            "O-O"
+          ],
+          "alts": [
+            [
+              "e4"
+            ]
+          ],
+          "key": "<p class='ok'><b>13.O-O</b>. The king leaves e1 before the c-file opens. (13.e4, hitting the centre at once, is just as good; castle next move.) After 13.Rh5 the rook went h5, e5, h5 in three moves and won nothing. Meanwhile the king stayed on e1, and on move 19 that cost you the c3 pawn (step 6).</p>"
+        },
+        {
+          "id": "long",
+          "label": "13.O-O-O? c4 14.Be2 b4 · the wrong side",
+          "mustPlay": [
+            "O-O-O",
+            "c4",
+            "Be2",
+            "b4"
+          ],
+          "key": "<p class='ok'><b>13.O-O-O?</b> Castling into Black's pawns: …c4 and …b4 come with gain of time, and the c-file opens towards c1. Castle on the side where the opponent's pawns are <i>not</i> already marching.</p>"
+        }
+      ],
+      "key": "<p><b>Set-up idea:</b> When your pieces are out, the king goes home <i>before</i> the centre opens. A rook move that attacks nothing is not activity, it is a lost move: Black can answer every Rh5 with a useful move of his own.</p>"
+    },
+    {
+      "id": "retake",
+      "name": "3 Tactic: take back",
+      "title": "After 14…Nxe5 · White to move · four ways to take back",
+      "prompt": "Black took on e5. You can take back with the pawn (dxe5) or the rook (Rxe5), or take on c5 first (dxc5). Only one keeps the game level. Find it, then find Black's answer to the other two: each one hides a tactic.",
+      "fen": "2rqkb1r/1b3pp1/p3p2p/1pppn2R/3P4/2PBP1P1/PPQN1PP1/R3K3 w Qk - 0 15",
+      "questions": [],
+      "branches": [
+        {
+          "id": "dxe5",
+          "label": "15.dxe5",
+          "write": true,
+          "given": 0,
+          "ask": "the safe recapture",
+          "mustPlay": [
+            "dxe5"
+          ],
+          "key": "<p class='ok'><b>15.dxe5</b>. Pawn takes, the rook stays free, and the e5 pawn takes the d6 and f6 squares away from Black's pieces. The game stays close to level.</p>"
+        },
+        {
+          "id": "dxc5",
+          "label": "15.dxc5?",
+          "write": true,
+          "given": 1,
+          "ask": "Black's in-between move",
+          "mustPlay": [
+            "dxc5",
+            "Nxd3+",
+            "Qxd3"
+          ],
+          "key": "<p class='ok'><b>15.dxc5? Nxd3+! 16.Qxd3</b>. Black's knight on e5 has just taken your knight, and now only your rook attacks it. Instead of running away, it takes your bishop <i>with check</i>. That is a <b>zwischenzug</b> (in-between move): 16.Qxd3 only takes back for the bishop. The knight you lost on e5 never comes back: a whole piece for a pawn. Before you take, ask: <i>can the attacked piece capture something with check?</i></p>"
+        },
+        {
+          "id": "rxe5",
+          "label": "15.Rxe5 (game)",
+          "write": true,
+          "given": 1,
+          "ask": "Black's strongest reply (not the game's 15…Bd6)",
+          "mustPlay": [
+            "Rxe5",
+            "g5"
+          ],
+          "alts": [
+            [
+              "Rxe5",
+              "c4"
+            ]
+          ],
+          "key": "<p class='ok'><b>15.Rxe5 g5!</b>. Your rook is stuck in front of Black's pawns: e4, d5 and f5 are covered by the d5 and e6 pawns, and g5 is now a pawn guarded by h6. Next comes …Bg7 and the rook is lost for a bishop. (15…c4, chasing your bishop first, wins too.) Black played 15…Bd6 and let you out. Step 4 shows the trap in full.</p>"
+        }
+      ],
+      "key": "<p><b>Tactic habit:</b> When you have several captures, look at Black's best answer to <i>each</i> one before you pick. Here one loses a piece at once, and the natural-looking one walks into a trap.</p>"
+    },
+    {
+      "id": "trap",
+      "name": "4 Tactic: rook trap",
+      "title": "After 15.Rxe5 · Black to move · catch the rook",
+      "prompt": "Now you are Black. The white rook on e5 looks active. Find the pawn move that leaves it with no safe square, then play the trap to the end.",
+      "fen": "2rqkb1r/1b3pp1/p3p2p/1pppR3/3P4/2PBP1P1/PPQN1PP1/R3K3 b Qk - 0 15",
+      "questions": [
+        {
+          "name": "squares",
+          "label": "4.1 After 15…g5, how many safe squares does the rook on e5 have?",
+          "type": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "0",
+              "label": "none"
+            },
+            {
+              "value": "1",
+              "label": "one"
+            },
+            {
+              "value": "2",
+              "label": "two or more"
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "g5",
+          "label": "15…g5",
+          "write": true,
+          "given": 0,
+          "ask": "the pawn move that cages the rook",
+          "mustPlay": [
+            "g5"
+          ],
+          "alts": [
+            [
+              "c4"
+            ]
+          ],
+          "key": "<p class='ok'><b>15…g5!</b>. Rf5 runs into …exf5, Re4 into …dxe4, Rxd5 into …exd5, Rxg5 into …hxg5, Rxe6+ into …fxe6. No safe square. (15…c4 also wins material, by kicking the bishop first.)</p>"
+        },
+        {
+          "id": "trap-line",
+          "label": "15…g5 16.f4 Bg7 17.Nf3 g4 18.Nh4 Bxe5 19.dxe5 · the trap closes",
+          "mustPlay": [
+            "g5",
+            "f4",
+            "Bg7",
+            "Nf3",
+            "g4",
+            "Nh4",
+            "Bxe5",
+            "dxe5"
+          ],
+          "key": "<p class='ok'>16.f4 tries to back the rook up, but …Bg7 hits it a second time and …g4 drives the knight away. Rook for bishop: Black is up the exchange.</p>"
+        }
+      ],
+      "key": "<p><b>Tactic pattern: the trapped piece.</b> A rook or bishop that goes deep into the opponent's pawns can run out of squares. Before you put a piece there, count its ways back. On e5 the answer was: none.</p>"
+    },
+    {
+      "id": "cover",
+      "name": "5 Set-up: cover c3",
+      "title": "Move 18 · White to move · take back on d4",
+      "prompt": "Black played …b4 and …cxd4. Your king is still on e1, and your c3 pawn will soon stand alone. Choose the recapture that keeps a piece near c3. Then play what happened in the game.",
+      "fen": "2rqk2r/1b3pp1/p2bp2p/3p3R/1p1p4/2PBPNP1/PPQ2PP1/R3K3 w Qk - 0 18",
+      "questions": [
+        {
+          "name": "weak",
+          "label": "5.1 After …bxc3 bxc3, which white pawn is the target?",
+          "type": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "c3",
+              "label": "c3: alone on the open c-file"
+            },
+            {
+              "value": "d4",
+              "label": "d4"
+            },
+            {
+              "value": "a2",
+              "label": "a2"
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "nxd4",
+          "label": "18.Nxd4",
+          "write": true,
+          "given": 0,
+          "ask": "the recapture that keeps c3 covered",
+          "mustPlay": [
+            "Nxd4"
+          ],
+          "key": "<p class='ok'><b>18.Nxd4</b>. The knight can go to e2 and guard c3 (18…bxc3 19.bxc3 Qa5 20.Ne2). Black is still better, but nothing falls.</p>"
+        },
+        {
+          "id": "game",
+          "label": "18.exd4 bxc3 19.bxc3 Qa5 (game)",
+          "mustPlay": [
+            "exd4",
+            "bxc3",
+            "bxc3",
+            "Qa5"
+          ],
+          "key": "<p class='ok'><b>18.exd4 bxc3 19.bxc3 Qa5</b>. c3 is now attacked by the queen and the c8 rook, and no knight can reach e2 to help. Step 6 shows why you can't simply defend it: the pawn is pinned.</p>"
+        }
+      ],
+      "key": "<p><b>Set-up idea:</b> When the opponent opens a file towards your uncastled king, recapture so that a piece stays next to your weak pawn. Pawns protect best from behind; pieces protect best from close by.</p>"
+    },
+    {
+      "id": "pin",
+      "name": "6 Tactic: pin first",
+      "title": "After 19.bxc3 · Black to move · win the c3 pawn",
+      "prompt": "You are Black again. The c3 pawn is attacked once (Rc8) and guarded once (Qc2). Rxc3 now drops the rook. Find the queen move that makes c3 fall anyway, and see why the order matters.",
+      "fen": "2rqk2r/1b3pp1/p2bp2p/3p3R/3P4/2PB1NP1/P1Q2PP1/R3K3 b Qk - 0 19",
+      "questions": [
+        {
+          "name": "pinned",
+          "label": "6.1 After 19…Qa5, why can't White hold c3 with Qxc3 later?",
+          "type": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "pin",
+              "label": "c3 is pinned: the queen on a5 looks through c3 to the king on e1"
+            },
+            {
+              "value": "count",
+              "label": "Black has more attackers"
+            },
+            {
+              "value": "time",
+              "label": "no time"
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "qa5",
+          "label": "19…Qa5",
+          "write": true,
+          "given": 0,
+          "ask": "the pin",
+          "mustPlay": [
+            "Qa5"
+          ],
+          "key": "<p class='ok'><b>19…Qa5!</b>. The diagonal a5–b4–c3–d2–e1 ends at your king. c3 is attacked twice now. Black played it in the game.</p>"
+        },
+        {
+          "id": "wrong-order",
+          "label": "19…Rxc3? 20.Qxc3 · the wrong order",
+          "mustPlay": [
+            "Rxc3",
+            "Qxc3"
+          ],
+          "key": "<p class='ok'><b>19…Rxc3? 20.Qxc3</b>. One attacker, one defender: the rook is gone. Same pawn, same capture, one move too early.</p>"
+        },
+        {
+          "id": "then-take",
+          "label": "19…Qa5 20.Ke2 Rxc3 · then take (game)",
+          "mustPlay": [
+            "Qa5",
+            "Ke2",
+            "Rxc3"
+          ],
+          "key": "<p class='ok'><b>20.Ke2 Rxc3</b>. The king stepped out of the pin, but c3 still falls: two attackers against one defender. (20.Qd2 Rxc3 is the same.) From here Black was clearly winning, and by 22.Bg6 the game was lost.</p>"
+        }
+      ],
+      "key": "<p><b>Tactic pattern: the pin.</b> A king on its starting square stands at the end of two diagonals (a5–e1 and h4–e1). Every piece in front of it on those lines can be pinned. Castling (step 2) removes the problem before it starts.</p>"
+    },
+    {
+      "id": "takeaways",
+      "name": "7 Your three habits",
+      "title": "What to take into the next game",
+      "prompt": "Six moments, two kinds of lesson. Pick the habit you will use first. There is no wrong answer, it is for you.",
+      "fen": "2rqk2r/1b3pp1/p2bp2p/3p3R/3P4/2PB1NP1/P1Q2PP1/R3K3 b Qk - 0 19",
+      "mustPlay": [],
+      "questions": [
+        {
+          "name": "habit",
+          "label": "7.1 Which habit first?",
+          "type": "select",
+          "options": [
+            {
+              "value": "",
+              "label": "choose"
+            },
+            {
+              "value": "castle",
+              "label": "Castle before the centre opens"
+            },
+            {
+              "value": "answers",
+              "label": "Before every capture: Black's best answer, with checks first"
+            },
+            {
+              "value": "count",
+              "label": "Count attackers and defenders before I take"
+            }
+          ]
+        }
+      ],
+      "key": "<p><b>Set-up:</b> pieces out, then a pawn lever (a4 against b5), then castle. Do it <i>before</i> moves like Rh5.</p><p><b>Tactics:</b> before any capture, look at the opponent's checks and captures in reply: Nxd3+ (zwischenzug), …g5 (trapped rook), …Qa5 (pin). All three were one move away from you, and all three are common.</p><p><b>Next:</b> open <b>Training</b> in the game list. Every day you get a few positions from real Lichess games near your rating. Write the whole line, both sides, until nothing more is taken, then Lock.</p>"
+    }
+  ]
+}

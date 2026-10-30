@@ -27,7 +27,7 @@ His words — use them, don't replace them:
 - Train first, crush later. No tournament calendar.
 - Compose Lichess / Chessable / ChessTempo / Aagaard. No puzzle engine.
 - **No Stockfish in the browser.** Author offline (`/opt/homebrew/bin/stockfish`). The hosted server's `/api/check` runs only after Lock and answers in sentences. The Lichess analysis link opens only after Lock.
-- `file://` must work. Sessions are bundled JS, not `fetch()`. Hosted extras live in `hosted.js` / `web/` / `server/` and act only on https.
+- `file://` must work. Sessions are bundled JS, not `fetch()`. Hosted extras live in `hosted.js` / `web/` / `server/` and act only on https (and on the `scripts/preview_hosted.py` localhost preview).
 - **Public repo:** `books/` and `sessions/private/` are gitignored. Book positions, solutions, diagrams and text never go into tracked files or onto Netlify (`build_site.py` refuses). Check the diff before every commit.
 - Keys are teaching sentences, never raw eval.
 - `session-board.js` stays generic: a new game = new JSON + `python3 scripts/bundle_sessions.py`. Verify every line with python-chess.
@@ -35,6 +35,7 @@ His words — use them, don't replace them:
 
 ## Next
 
+000. **Nico (first invitee, ~1350)**: his game `2xz7ugnc`, tour, training at 1350 built 2026-10-30, not committed/deployed. Waits for Martin's test feedback, then Nico's email → hash into `sessions/players.js` → deploy → invite QR (HANDOFF §8 000000).
 00. Hosted copy moved to Cloudflare Pages (https://zwischenzug.pages.dev); SITE_URL switched 2026-10-14; ask whether sign-in, voice and sync work there (HANDOFF §8 0000).
 00a. Voice vs Lichess measured: about even. Two fixes approved, build them next: looser gate for clean legal moves, ask instead of guessing a rank (HANDOFF §8 0000a).
 00b. Aagaard ch.7 (30 exercises): `books/ch7/check.html` waits for his confirmation, then build + bundle (HANDOFF §8 0000b).

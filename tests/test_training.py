@@ -30,6 +30,17 @@ def open_today(page, app_url):
     return page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
 
 
+def settings(page):
+    """Open the settings under the level line (closed by default)."""
+    if page.get_attribute("#trainingSet", "aria-expanded") != "true":
+        page.click("#trainingSet")
+
+
+def pressed(page, group, text):
+    page.wait_for_function("([g, t]) => { const b = document.querySelector('#' + g + ' [aria-pressed=true]');"
+                           " return b && b.innerText === t; }", arg=[group, text])
+
+
 def level(page):
     return page.evaluate("JSON.parse(localStorage.getItem('chess_path_to_v1')).training.level")
 
@@ -74,8 +85,9 @@ def test_the_day_stays_the_same_after_a_reload(browser_page, app_url):
 def test_set_rating_gives_a_new_set(browser_page, app_url):
     page = browser_page
     open_today(page, app_url)
-    page.once("dialog", lambda d: d.accept("2100"))
-    page.click("#trainingSet")
+    settings(page)
+    page.fill("#trainingRate input", "2100")
+    page.press("#trainingRate input", "Enter")
     page.wait_for_function("document.getElementById('trainingLevel') && "
                            "document.getElementById('trainingLevel').innerText.includes('2100')")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
@@ -85,9 +97,9 @@ def test_set_rating_gives_a_new_set(browser_page, app_url):
 def test_count_per_day(browser_page, app_url):
     page = browser_page
     open_today(page, app_url)
+    settings(page)
     page.click("#trainingLevel [data-count='5']")
-    page.wait_for_function("document.getElementById('trainingCount') && "
-                           "document.getElementById('trainingCount').innerText.startsWith('5 a day')")
+    pressed(page, "trainingCount", "5")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     assert len(s["steps"]) == 5
 
@@ -124,15 +136,15 @@ def test_a_miss_comes_back_two_days_later_and_leaves_when_right(browser_page, ap
 def test_harder_and_easier_move_the_set_by_200(browser_page, app_url):
     page = browser_page
     open_today(page, app_url)
+    settings(page)
     page.click("#trainingDiff [data-diff='200']")
-    page.wait_for_function("document.querySelector('#trainingDiff b') && "
-                           "document.querySelector('#trainingDiff b').innerText === 'Harder'")
+    pressed(page, "trainingDiff", "Harder")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     assert "near 1700" in s["title"]
     assert all(abs(int(st["title"].split()[-1]) - 1700) <= 100 for st in s["steps"])
+    settings(page)
     page.click("#trainingDiff [data-diff='-200']")
-    page.wait_for_function("document.querySelector('#trainingDiff b') && "
-                           "document.querySelector('#trainingDiff b').innerText === 'Easier'")
+    pressed(page, "trainingDiff", "Easier")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     assert all(abs(int(st["title"].split()[-1]) - 1300) <= 100 for st in s["steps"])
 
@@ -146,9 +158,9 @@ def test_focus_sets_exist_in_every_band():
 def test_focus_gives_only_tagged_positions(browser_page, app_url):
     page = browser_page
     open_today(page, app_url)
+    settings(page)
     page.click("#trainingFocus [data-focus='z']")
-    page.wait_for_function("document.querySelector('#trainingFocus b') && "
-                           "document.querySelector('#trainingFocus b').innerText === 'Zwischenzug'")
+    pressed(page, "trainingFocus", "Zwischenzug")
     s = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     tagged = {p["id"] for p in PUZZLES if "z" in p["f"]}
     assert "Zwischenzug" in s["title"] and all(st["id"] in tagged for st in s["steps"])
@@ -161,9 +173,9 @@ def test_more_after_the_day_keeps_what_is_solved(browser_page, app_url):
     page.fill("input[name=line]", " ".join(first["solve"]["line"]))
     page.click("#boardLock")
     page.wait_for_selector("#boardKey.show")
+    settings(page)
     page.click("#trainingLevel [data-count='15']")
-    page.wait_for_function("document.getElementById('trainingCount') && "
-                           "document.getElementById('trainingCount').innerText.startsWith('15 a day')")
+    pressed(page, "trainingCount", "15")
     s2 = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     ids = [st["id"] for st in s2["steps"]]
     assert len(ids) == 15 and len(set(ids)) == 15 and first["id"] in ids

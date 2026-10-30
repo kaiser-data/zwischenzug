@@ -129,17 +129,24 @@
 
   <h1>Most lines don’t end where you stop calculating.</h1>
   <p>Zwischenzug trains one habit: write your line all the way to the last capture. Only then does the engine show where it really ends.</p>
-  <a class="start" href="/index.html?session=training-today#session" data-start>Start the first position</a>
+  <a class="start" href="/index.html#session" data-start>Start</a>
+
+  <h2>What is waiting for you</h2>
+  <ol>
+    <li><b>Your games.</b> A game you played, cut into short lessons: the set-up moves that mattered, and the tactics hiding one move away.</li>
+    <li><b>Training.</b> Every day a few positions from real Lichess games near your rating. You set the rating once; it moves with your results.</li>
+  </ol>
 
   <h2>How a position goes</h2>
   <ol>
-    <li><b>Look.</b> Every day you get three positions near your rating, from real games. Set your rating once above the board.</li>
+    <li><b>Look.</b> Read the task above the board: who is to move, and what to find.</li>
     <li><b>Calculate</b> without moving pieces. Take your time.</li>
-    <li><b>Say or play your line,</b> move by move, until nothing more is taken.</li>
-    <li><b>Lock it</b> by saying <q>done</q> or <q>fertig</q>. You get the key, then the engine’s answer: where your line stopped too early, or that it holds.</li>
+    <li><b>Play or write your line,</b> both sides, move by move, until nothing more can be taken. Tap a piece and a square, or type <q>Nxd3+</q> like on Lichess.</li>
+    <li><b>Lock it.</b> You get the key, the idea in plain words, and then the engine's verdict: where your line stopped too early, or that it holds.</li>
   </ol>
+  <p class="caption">The first time you open the board, a short tour shows every button. You can replay it any time with <i>Board tour</i> at the bottom of the page.</p>
 
-  <h2>What you can say</h2>
+  <h2>Or just talk (optional)</h2>
   <p>Tap 🎧 once and talk. Moves are heard in English or German; switch with the EN/DE button next to it.</p>
   <table>
     <tr><th>To</th><th>Say</th></tr>
@@ -157,10 +164,11 @@
   <p><b>iPhone:</b> in Safari, tap Share, then <i>Add to Home Screen</i>.<br>
      <b>Android:</b> in Chrome, open the menu, then <i>Install app</i>.</p>
   <p>It then opens full screen, and you stay signed in for 30 days.</p>
-  <a class="start" href="/index.html?session=training-today#session" data-start>Start the first position</a>
+  <a class="start" href="/index.html#session" data-start>Start</a>
   <p class="who" id="who"></p>
 </main>
 <script src="/pieces.js"></script>
+<script src="/sessions/players.js"></script>
 <script>
 (function () {
   // Game 2 after 17.Bxf5: the line he stopped on. f5 is where the queen takes back.
@@ -188,7 +196,16 @@
     a.addEventListener("click", function () { try { localStorage.setItem("zz_welcome_seen", "1"); } catch (e) {} });
   });
   fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : null; }).then(function (me) {
-    if (me) document.getElementById("who").textContent = "Signed in as " + me.email + ".";
+    if (!me) return;
+    document.getElementById("who").textContent = "Signed in as " + me.email + ".";
+    // The board reads these before it draws, so an invitee's first view already shows their own games.
+    const player = me.owner || !window.pathPlayerOf ? Promise.resolve("") : window.pathPlayerOf(me.email);
+    return player.then(function (id) {
+      try {
+        localStorage.setItem("zz_role", me.owner ? "owner" : "guest");
+        localStorage.setItem("zz_player", id);
+      } catch (e) {}
+    });
   }).catch(function () {});
 })();
 </script>

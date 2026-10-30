@@ -3,7 +3,8 @@
 /* Invitees see the board, not the owner's dossier. */
 body.zz-guest .dossier-chrome,
 body.zz-guest .tabs button:not([data-tab="session"]),
-body.zz-guest #voiceDrill { display: none !important; }
+body.zz-guest #voiceDrill,
+body.zz-guest .variations { display: none !important; }
 
 .zz-dock { display: none; }
 

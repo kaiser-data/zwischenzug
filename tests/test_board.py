@@ -44,12 +44,12 @@ def test_use_board_line_fills_and_grades(browser_page, app_url):
     assert page.is_disabled("#boardTake"), "nothing on the board yet"
 
     play(page, fen, line[:2])
-    assert "(2 ply)" in page.inner_text("#boardTake")
+    assert "(2 moves)" in page.inner_text("#boardTake")
     page.click("#boardTake")
     assert page.input_value("input[name=line]").startswith(fen.split()[5] + ". ")
 
     page.click("#boardLock")
-    assert "stopped at ply 2" in page.inner_text("#boardErr")
+    assert "stopped after 2 moves" in page.inner_text("#boardErr")
 
 
 def test_miss_rewinds_board_to_the_failing_ply(browser_page, app_url):
@@ -69,7 +69,7 @@ def test_miss_rewinds_board_to_the_failing_ply(browser_page, app_url):
     page.click("#boardTake")
     page.click("#boardLock")
 
-    assert "Ply 3" in page.inner_text("#boardErr")
+    assert "leaves the line" in page.inner_text("#boardErr")
     assert "▶ 1 more" in page.inner_text("#boardStatus")
 
 
@@ -293,7 +293,7 @@ def test_clean_game_needs_the_line_to_the_last_capture(browser_page, app_url):
     play(page, fen, line[:5])
     page.click("#boardTake")
     page.click("#boardLock")
-    assert "stopped at ply 5" in page.inner_text("#boardErr")
+    assert "stopped after 5 moves" in page.inner_text("#boardErr")
 
     page.click("#boardReset")
     play(page, fen, line)                       # full length: graded without Lock
@@ -308,25 +308,49 @@ def open_step(page, app_url, session_id, index):
     page.locator("#boardSteps button").nth(index).click()
 
 
+def solve_card(page, fen, branch):
+    """Solve the open card the way a player would: write the line, or step through a shown one."""
+    if branch.get("write"):
+        given = branch.get("given", 1)
+        page.fill("#branchWrite input[name=line]", " ".join(branch["mustPlay"][given:]))
+        page.wait_for_timeout(400)                # a full line solves the card as it is typed
+        if not page.query_selector("#branchList .tcard.done"):
+            page.click("#branchWrite .task-check")
+    else:
+        for _ in branch["mustPlay"]:
+            page.click("#branchList .task-step")
+    page.wait_for_selector("#branchList .tcard.done")
+
+
+def open_card(page, step, k):
+    """Cards unlock in order: solve the ones before card k, then go on to it."""
+    for b in step["branches"][:k]:
+        solve_card(page, step["fen"], b)
+        page.click("#branchList .task-go")
+
+
 def test_written_branch_hides_its_line(browser_page, app_url):
     step = public_step(CLEAN_SESSION, "defence")
     page = browser_page
     open_step(page, app_url, CLEAN_SESSION, 2)
     page.wait_for_selector("input[name=line]")
 
-    first = page.locator("#branchList button").first.inner_text()
-    assert "Qxc3" in first and "Nxc3" not in first, "only the given ply"
+    title = page.inner_text("#branchList .tcard .task-title")
+    assert "Qxc3" in title and "Nxc3" not in title, "only the given ply"
+    assert page.locator("#branchList .tcard").count() == 1, "one card at a time"
+    assert page.is_disabled("#branchList .tdot >> nth=1"), "the next card is locked"
     assert "need" not in page.inner_text("#boardStatus")
 
     page.fill("input[name=line]", "15. Bxd7+")
     page.press("input[name=line]", "Enter")
-    assert "leaves the line" in page.inner_text("#boardErr")
+    assert "leaves the line" in page.inner_text("#branchList .tcard")
 
     page.fill("input[name=line]", "15. Nxc3 Nxd6 16. Qxh8+ Ke7 17. Qxa8")
     page.press("input[name=line]", "Enter")
-    assert "Locked. Next:" in page.inner_text("#boardErr")
-    assert "✓" in page.locator("#branchList button").first.inner_text()
-    assert "15." not in page.locator("#branchList button").nth(1).inner_text(), "next line still hidden"
+    assert "Right" in page.inner_text("#branchList .task-win")
+    assert page.is_visible("#branchList .task-key"), "the solved card opens its key"
+    assert "Next task" in page.inner_text("#branchList .task-go")
+    assert not page.is_disabled("#branchList .tdot >> nth=1"), "solving unlocks the next card"
     assert step["branches"][0]["mustPlay"][-1] == "Qxa8"
     assert page.errors == []
 
@@ -336,24 +360,42 @@ def test_written_branch_on_the_board_locks_itself(browser_page, app_url):
     mate = step["branches"][1]
     page = browser_page
     open_step(page, app_url, CLEAN_SESSION, 2)
-    page.locator("#branchList button").nth(1).click()
+    open_card(page, step, 1)
+    given = mate.get("given", 1)
+    assert mate["mustPlay"][given - 1].rstrip("+#") in page.inner_text("#boardStatus"), "the given moves are on the board"
 
-    play(page, step["fen"], mate["mustPlay"])
+    after = chess.Board(step["fen"])
+    for san in mate["mustPlay"][:given]:
+        after.push_san(san)
+    play(page, after.fen(), mate["mustPlay"][given:])
 
-    assert "Locked. Next:" in page.inner_text("#boardErr")
-    assert "✓" in page.locator("#branchList button").nth(1).inner_text()
+    page.wait_for_selector("#branchList .tcard.done")
+    assert "✓" in page.inner_text("#branchList .tdot >> nth=1")
     assert page.errors == []
 
 
 def test_an_accepted_alternative_passes(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "defence")
     page = browser_page
     open_step(page, app_url, CLEAN_SESSION, 2)
-    page.locator("#branchList button").nth(3).click()
+    open_card(page, step, 3)
 
     page.fill("input[name=line]", "14. Qxc5")
     page.press("input[name=line]", "Enter")
 
-    assert "✓" in page.locator("#branchList button").nth(3).inner_text()
+    page.wait_for_selector("#branchList .tcard.done")
+    assert page.errors == []
+
+
+def test_hint_lights_the_piece_then_shows_the_move(browser_page, app_url):
+    step = public_step(CLEAN_SESSION, "defence")
+    page = browser_page
+    open_step(page, app_url, CLEAN_SESSION, 2)
+    page.click("#branchList .task-hint")
+    assert page.locator("#chessBoard .hint-from").count() == 1
+    page.click("#branchList .task-hint")
+    second = step["branches"][0]["mustPlay"][1]
+    assert second.rstrip("+#") in page.inner_text("#boardStatus")
     assert page.errors == []
 
 
@@ -450,10 +492,10 @@ def test_locked_branches_survive_a_reload(browser_page, app_url):
     page.evaluate("async () => { await window.pathStore.settled(); }")
 
     page.reload()
-    page.wait_for_selector("#branchList button")
+    page.wait_for_selector("#branchList .tcard")
 
-    assert "✓" in page.locator("#branchList button").first.inner_text()
-    assert "on" in (page.locator("#branchList button").nth(1).get_attribute("class") or "")
+    assert "✓" in page.inner_text("#branchList .tdot >> nth=0")
+    assert "card 2 of" in page.text_content("#branchList .task-kind"), "resumes on the first open card"
     assert page.errors == []
 
 

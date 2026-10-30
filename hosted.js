@@ -1,10 +1,15 @@
-// Hosted mode (https, behind the Railway API on /api). On file:// this file does nothing:
-// the local dossier keeps its local voice server and its localStorage, no login.
+// Hosted mode (https, behind the Railway API on /api; or http://localhost from scripts/preview_hosted.py).
+// On file:// this file does nothing: the local dossier keeps its local voice server and its localStorage, no login.
 (function () {
-  if (location.protocol !== "https:") return;
+  if (location.protocol !== "https:" && location.hostname !== "localhost") return;
 
   window.PATH_VOICE_URL = "/api/voice";
   window.PATH_REMOTE_STORE = true;
+  // An invitee sees Training and their own games only (session-board.js filters on PATH_VIEWER).
+  // The role and player of the last visit are set before the board renders; /me corrects them below.
+  try {
+    if (localStorage.getItem("zz_role") === "guest") window.PATH_VIEWER = { player: localStorage.getItem("zz_player") || "" };
+  } catch (e) {}
 
   const css = document.createElement("style");
   css.textContent =
@@ -99,18 +104,38 @@
   }
 
   function signedIn(me) {
+    const was = window.PATH_VIEWER ? "guest:" + window.PATH_VIEWER.player : "owner";
+    (me.owner || !window.pathPlayerOf ? Promise.resolve("") : window.pathPlayerOf(me.email)).then(function (player) {
+      const now = me.owner ? "owner" : "guest:" + player;
+      let kept = false;
+      try {
+        localStorage.setItem("zz_role", me.owner ? "owner" : "guest");
+        localStorage.setItem("zz_player", player);
+        kept = localStorage.getItem("zz_player") === player;
+      } catch (e) {}
+      if (!me.owner) window.PATH_VIEWER = { player: player };
+      // First visit on this device, or the role changed: render again with the right sessions.
+      // Only when storage works — otherwise the reload would land here again, forever.
+      if (now !== was && kept && hasWelcome()) { location.reload(); return; }
+      ready(me);
+    });
+  }
+
+  function hasWelcome() {
+    try { return !!localStorage.getItem("zz_welcome_seen"); } catch (e) { return true; }
+  }
+
+  function ready(me) {
     document.body.classList.add(me.owner ? "zz-owner" : "zz-guest");
-    try { localStorage.setItem("zz_role", me.owner ? "owner" : "guest"); } catch (e) {}
-    let seen = null;
-    try { seen = localStorage.getItem("zz_welcome_seen"); } catch (e) {}
-    if (!seen) { location.replace("/welcome.html"); return; }
+    if (!hasWelcome()) { location.replace("/welcome.html"); return; }
     if (!me.owner && location.hash !== "#session") {
       const board = document.querySelector('.tabs [data-tab="session"]');
       if (board) board.click();
     }
+    if (!me.owner && window.pathTour) window.pathTour.maybeStart();
     const sheetFoot = document.querySelector(".sheet-foot");
     if (sheetFoot && sheetFoot.firstChild && sheetFoot.firstChild.nodeType === 3) {
-      sheetFoot.firstChild.textContent ="Progress stays on this device. Voice and the engine check run on the Zwischenzug server. ";
+      sheetFoot.firstChild.textContent ="Your progress is saved to your account, so phone and computer stay in step. Voice and the engine check run on the Zwischenzug server. ";
     }
     const foot = document.querySelector(".sheet-foot") || document.body;
     const line = document.createElement("div");

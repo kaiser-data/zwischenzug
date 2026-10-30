@@ -1,6 +1,21 @@
 (function () {
+  // A hosted invitee (PATH_VIEWER, set by hosted.js) sees Training and the games with their `player` id;
+  // the owner and the local page see every session.
   function sessions() {
-    return window.PATH_SESSIONS || {};
+    const all = window.PATH_SESSIONS || {};
+    const viewer = window.PATH_VIEWER;
+    if (!viewer) return all;
+    const mine = {};
+    Object.keys(all).forEach(function (id) {
+      if (all[id].group === "Training" || (viewer.player && all[id].player === viewer.player)) mine[id] = all[id];
+    });
+    return mine;
+  }
+  function playerGroup(s) {
+    if (!s.player) return "";
+    if (window.PATH_VIEWER) return "Your games";
+    const p = (window.PATH_PLAYERS || {})[s.player];
+    return "Games · " + (p ? p.name : s.player);
   }
   // Optional session `category`: what kind of game it was decides the follow-up it gets.
   const CATEGORIES = {
@@ -74,6 +89,7 @@
         el.type = "button";
         el.className = "sq " + ((fi + ri) % 2 ? "dark" : "light");
         if (selected === sq) el.classList.add("sel");
+        if (hintSq === sq) el.classList.add("hint-from");
         if (dests.has(sq)) el.classList.add("hint", piece ? "piece" : "empty");
         if (last && (last.from === sq || last.to === sq)) el.classList.add("last");
         if (piece) el.innerHTML = pieceSVG(piece.color, piece.type);
@@ -98,7 +114,8 @@
     const turn = game.turn() === "w" ? "White" : "Black";
     const hist = game.history().join(" ");
     const need = mustPlayNow();
-    const extra = need.length && !locked[step] ? " · need " + need.join(" ") : "";
+    const reading = (cur().branches || []).length && (branchLocked[activeBranch] || atAnswer);
+    const extra = need.length && !locked[step] && !reading ? " · need " + need.join(" ") : "";
     const ahead = aheadMoves();
     document.getElementById("boardStatus").textContent = turn + " to move" + (hist ? " · " + hist : "") +
       (ahead.length ? " · ▶ " + ahead.length + " more" : "") + extra;
@@ -116,7 +133,7 @@
     if (take) {
       const n = boardLine().length;
       take.disabled = !n || !takesLine();
-      take.textContent = "Use board line" + (n ? " (" + n + " ply)" : "");
+      take.textContent = "Use board line" + (n ? " (" + n + (n === 1 ? " move)" : " moves)") : "");
       take.title = n ? "Put the line on the board into the answer" : "Play the line on the board first";
     }
     const back = document.getElementById("boardBack");
@@ -132,6 +149,7 @@
   // The board stays playable after Lock so lines can be analysed and saved.
   function onSquare(sq) {
     const piece = game.get(sq);
+    hintSq = null;
     if (selected) {
       const move = game.move({ from: selected, to: sq, promotion: "q" });
       selected = null;
@@ -176,13 +194,34 @@
 
   // A written branch shows only its first `given` ply; the rest is his to write.
   function givenOf(b) { return b.given == null ? 1 : b.given; }
-  function branchLabel(b) {
-    if (!b.write) return b.label;
-    return numbered(cur().fen, (b.mustPlay || []).slice(0, givenOf(b))) + " …" + (b.ask ? " " + b.ask : "");
-  }
   function writeBranch() {
     const b = (cur().branches || [])[activeBranch];
     return b && b.write && !branchLocked[activeBranch] && !locked[step] ? b : null;
+  }
+
+  // Branches are task cards, shown one at a time like the levels of a game: progress dots on top,
+  // ‹ › back to cards already done, the next card unlocks when this one is solved. Each card says
+  // what to do in one sentence and has one main button; a solved card shows ✓, its key and "Next".
+  // The step's questions are the last card. `atAnswer` is true while that card is on screen.
+  let atAnswer = false;
+  let hintLevel = 0;            // 0 none, 1 the piece lights up, 2 the move is shown
+  let hintSq = null;
+
+  function taskOf(b) {
+    const n = (b.mustPlay || []).length, given = givenOf(b);
+    const how = " Play it on the board, or type it and press <b>Check</b>.";
+    if (!b.write) {
+      return { code: "watch", kind: "Watch", title: b.label,
+        todo: "Tap <b>▶ Next move</b> and follow the line move by move. Then read why." };
+    }
+    if (!given) {
+      return { code: "find", kind: "Find", title: b.ask ? b.ask.charAt(0).toUpperCase() + b.ask.slice(1) : "Find the move",
+        todo: (n === 1 ? "Find the move." : "Find the line: " + n + " moves, White's and Black's both count.") + how };
+    }
+    const after = numbered(cur().fen, b.mustPlay.slice(0, given));
+    return { code: "line", kind: "Your line", title: after + " …" + (b.ask ? " " + b.ask : ""),
+      todo: "On the board: " + esc(after) + ". How does it go on? " + (n - given) + (n - given === 1 ? " move" : " moves") +
+        ", both sides, until nothing more can be taken." + how };
   }
 
   function renderBranchWrite() {
@@ -190,41 +229,252 @@
     if (!host) return;
     const b = writeBranch();
     if (!b) { host.innerHTML = ""; return; }
-    const n = (b.mustPlay || []).length;
-    host.innerHTML = "<label>Your line after " + esc(numbered(cur().fen, b.mustPlay.slice(0, givenOf(b)))) +
-      "<span>Both sides, to the last capture or check. On the board it is checked at " + n + " ply; stopping earlier, press Lock.</span>" +
-      "<input name='line' type='text' autocomplete='off' placeholder='" + SPEAK + "'></label>" + takeButton();
-    const take = document.getElementById("boardTake");
-    if (take) take.addEventListener("click", function () { fillAnswer(boardLine()); });
+    host.innerHTML = "<input name='line' type='text' autocomplete='off' autocapitalize='off' spellcheck='false'" +
+      " aria-label='Your moves' placeholder='" + SPEAK + "'>" +
+      "<div class='task-actions'><button type='button' class='btn task-check'>Check</button>" +
+      "<button type='button' class='btn ghost task-hint'>" + (hintLevel ? "Show the move" : "Hint") + "</button></div>" +
+      "<p class='task-tip' aria-live='polite'></p>";
+    host.querySelector(".task-check").addEventListener("click", function () { lockStep(); });
+    host.querySelector(".task-hint").addEventListener("click", giveHint);
+  }
+
+  // Cards that may be opened: every solved one, the first open one, and the questions once all are solved.
+  function cardCount() { return (cur().branches || []).length + (document.getElementById("taskAnswer") ? 1 : 0); }
+  function firstOpen() { const i = branchLocked.indexOf(false); return i === -1 ? (cur().branches || []).length : i; }
+  function current() { return atAnswer ? (cur().branches || []).length : activeBranch; }
+  function reachable(i) { return locked[step] || i <= firstOpen(); }
+
+  // The one button on a solved card: on to the next card, the questions, or the next step.
+  function nextAction() {
+    const list = cur().branches || [];
+    const open = branchLocked.indexOf(false);
+    if (!locked[step] && open !== -1) return { label: "Next task →", go: function () { startTask(open); } };
+    if (!locked[step] && document.getElementById("taskAnswer")) return { label: "Last: " + answerTitle() + " →", go: showAnswer };
+    if (locked[step] && current() < cardCount() - 1) {
+      const to = current() + 1;
+      return { label: "Next card →", go: function () { if (to < list.length) startTask(to); else showAnswer(); } };
+    }
+    if (locked[step] && step < steps().length - 1) return { label: "Next step →", go: function () { document.getElementById("boardNext").click(); } };
+    return null;
+  }
+
+  function answerTitle() {
+    const n = (cur().questions || []).length;
+    return n === 1 ? "one question" : n + " questions";
+  }
+
+  function renderNav() {
+    const total = cardCount(), at = current();
+    const dots = [];
+    for (let i = 0; i < total; i++) {
+      const done = i < (cur().branches || []).length ? branchLocked[i] : locked[step];
+      const cls = (i === at ? "on " : "") + (done ? "done " : "") + (reachable(i) ? "" : "locked");
+      dots.push("<button type='button' class='tdot " + cls + "' data-i='" + i + "'" + (reachable(i) ? "" : " disabled") +
+        " aria-label='Card " + (i + 1) + (done ? ", done" : reachable(i) ? "" : ", locked") + "'" +
+        (i === at ? " aria-current='step'" : "") + ">" + (done ? "✓" : i + 1) + "</button>");
+    }
+    return "<div class='tnav'><button type='button' class='tnav-arrow' data-go='-1' aria-label='Previous card'" + (at === 0 ? " disabled" : "") + ">‹</button>" +
+      "<div class='tdots'>" + dots.join("") + "</div>" +
+      "<button type='button' class='tnav-arrow' data-go='1' aria-label='Next card'" + (at + 1 >= total || !reachable(at + 1) ? " disabled" : "") + ">›</button></div>";
+  }
+
+  function goCard(i) {
+    if (i < 0 || i >= cardCount() || !reachable(i)) return;
+    if (i === (cur().branches || []).length) showAnswer(); else startTask(i);
   }
 
   function renderBranches() {
     const list = cur().branches;
     const host = document.getElementById("branchList");
     if (!host) return;
+    homeErr();
     if (!list || !list.length) {
-      renderBranchWrite();
       host.innerHTML = "";
       host.classList.add("hidden");
       return;
     }
     host.classList.remove("hidden");
-    host.innerHTML = list.map(function (b, i) {
-      const cls = i === activeBranch ? "on" : (branchLocked[i] ? "done" : "");
-      const mark = branchLocked[i] ? " ✓" : "";
-      return "<button type='button' class='branch " + cls + "' data-i='" + i + "'>" + esc(branchLabel(b)) + mark + "</button>";
-    }).join("");
-    renderBranchWrite();
-    host.querySelectorAll("button").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        if (locked[step]) return;
-        activeBranch = Number(btn.dataset.i);
-        game = new Chess(cur().fen);
-        selected = null;
-        renderBranches();
-        renderBoard();
-      });
+    let card = "";
+    if (!atAnswer) {
+      const i = activeBranch, b = list[i], t = taskOf(b), done = !!branchLocked[i];
+      let body;
+      if (done) {
+        const next = nextAction();
+        body = "<p class='task-win'>" + (t.code === "watch" ? "✓ Seen." : "✓ Right!") + "</p>" +
+          "<div class='task-key'>" + (b.key || "") + "</div>" +
+          (next ? "<div class='task-actions'><button type='button' class='btn task-go'>" + next.label + "</button></div>" : "");
+      } else if (locked[step]) {
+        body = "<div class='task-key'>" + (b.key || "") + "</div>";
+      } else {
+        body = "<p class='task-do'>" + t.todo + "</p>" + (b.write ? "<div id='branchWrite'></div>"
+          : "<div class='task-actions'><button type='button' class='btn task-step'>▶ Next move</button>" +
+            "<button type='button' class='btn ghost task-all'>Play all</button></div>") +
+          "<div class='task-msg'></div>";
+      }
+      card = "<section class='tcard on" + (done ? " done" : "") + "'><div class='task-head'>" +
+        "<span class='task-title'><span class='task-kind' data-kind='" + t.code + "'>" + t.kind +
+        " · card " + (i + 1) + " of " + cardCount() + "</span>" + esc(t.title) + "</span></div>" +
+        "<div class='task-body'>" + body + "</div></section>";
+    }
+    host.innerHTML = renderNav() + card;
+    host.querySelectorAll(".tdot").forEach(function (btn) {
+      btn.addEventListener("click", function () { goCard(Number(btn.dataset.i)); });
     });
+    host.querySelectorAll(".tnav-arrow").forEach(function (btn) {
+      btn.addEventListener("click", function () { goCard(current() + Number(btn.dataset.go)); });
+    });
+    const go = host.querySelector(".task-go");
+    if (go) go.addEventListener("click", function () { const n = nextAction(); if (n) n.go(); });
+    const one = host.querySelector(".task-step"), all = host.querySelector(".task-all");
+    if (one) one.addEventListener("click", function () { playShown(false); });
+    if (all) all.addEventListener("click", function () { playShown(true); });
+    renderBranchWrite();
+    syncAnswer();
+    placeErr();
+  }
+
+  // Open a card. An open written line starts with its given moves on the board; a solved card
+  // puts its whole line there to read the key by.
+  function startTask(i) {
+    const b = (cur().branches || [])[i];
+    if (!b) return;
+    stopShow();
+    atAnswer = false;
+    activeBranch = i;
+    hintLevel = 0;
+    hintSq = null;
+    const line = branchLocked[i] || locked[step] ? (b.mustPlay || []) : b.write ? (b.mustPlay || []).slice(0, givenOf(b)) : [];
+    document.getElementById("boardErr").textContent = "";
+    renderBranches();
+    rewindTo(line, line.length);
+    focusCard();
+  }
+
+  function showAnswer() {
+    stopShow();
+    atAnswer = true;
+    hintSq = null;
+    document.getElementById("boardErr").textContent = "";
+    renderBranches();
+    focusCard();
+  }
+
+  // Bring the card into view, but never pull the page away from the board on a wide screen.
+  function focusCard() {
+    const el = atAnswer ? document.getElementById("taskAnswer") : document.querySelector("#branchList .tcard");
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.top > window.innerHeight - 120) el.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
+  // Hints in two stages: first the piece to move lights up, then the move itself goes on the board.
+  // Either counts as help, so the card is no longer "right on the first try".
+  function giveHint() {
+    const b = writeBranch();
+    if (!b) return;
+    if (!firstMiss) firstMiss = { result: "short", ply: game.history().length };
+    const line = b.mustPlay || [];
+    const h = game.history().map(norm);
+    if (!startsWith(line.map(norm), h) || h.length >= line.length) {
+      rewindTo(line, givenOf(b));
+    }
+    const g = new Chess(game.fen());
+    const mv = g.move(line[game.history().length], { sloppy: true });
+    if (!mv) return;
+    document.getElementById("boardErr").textContent = "";
+    if (hintLevel === 0) {
+      hintLevel = 1;
+      hintSq = mv.from;
+      renderBoard();
+      renderBranchWrite();
+      tip("Hint: the piece with the gold frame moves. Where to?");
+      return;
+    }
+    hintLevel = 2;
+    hintSq = null;
+    game.move(mv.san, { sloppy: true });
+    future = []; futureGame = game; selected = null;
+    fillLineBox();
+    renderBoard();
+    tip("The move is " + mv.san + "." + (game.history().length < line.length ? " Go on from here." : ""));
+    autoCheck();
+  }
+
+  // Help is not an error: it goes in its own quiet line in the card.
+  function tip(text) {
+    const el = document.querySelector("#branchWrite .task-tip");
+    if (el) el.textContent = text;
+  }
+
+  // After a shown move, the box holds the moves so far, so Check grades what is on the board.
+  function fillLineBox() {
+    const form = document.getElementById("boardForm"), wb = writeBranch();
+    if (wb && form.elements.line) form.elements.line.value = game.history().slice(givenOf(wb)).join(" ");
+  }
+
+  // ▶ Next move on a watch card: the next move of its line (from the start if the board left it).
+  let showTimer = null;
+  function stopShow() { clearTimeout(showTimer); showTimer = null; }
+  function playShown(all) {
+    const at = activeBranch, b = (cur().branches || [])[at];
+    stopShow();
+    if (!b || b.write || branchLocked[at] || locked[step]) return;
+    const line = b.mustPlay || [];
+    const h = game.history().map(norm);
+    if (h.length >= line.length || !startsWith(line.map(norm), h)) game = new Chess(cur().fen);
+    const san = line[game.history().length];
+    if (!san) return;
+    game.move(san, { sloppy: true });
+    future = [];
+    futureGame = game;
+    selected = null;
+    renderBoard();
+    autoCheck();                                // the last move solves the card
+    if (all && activeBranch === at && !branchLocked[at]) showTimer = setTimeout(function () { playShown(true); }, 650);
+  }
+
+  // The questions of a step with cards: the last card, shown only when it is the one on screen.
+  function answerCard(qs) {
+    return "<section class='tcard task-answer hidden' id='taskAnswer'><div class='task-head'><span class='task-title'>" +
+      "<span class='task-kind' data-kind='answer'>Answer</span>" + (qs.length === 1 ? "One question" : qs.length + " questions") +
+      "</span></div><div class='task-body'>" + qs.map(renderQuestion).join("") + "<div class='task-msg'></div>" +
+      "<div class='task-actions'><button type='submit' class='btn' id='taskFinish'>Finish step</button></div></div></section>";
+  }
+
+  function syncAnswer() {
+    const card = document.getElementById("taskAnswer");
+    if (!card) return;
+    card.classList.toggle("hidden", !atAnswer);
+    card.classList.toggle("on", atAnswer);
+    card.classList.toggle("done", !!locked[step]);
+    const kind = card.querySelector(".task-kind");
+    kind.textContent = "Answer · card " + cardCount() + " of " + cardCount();
+    document.getElementById("taskFinish").classList.toggle("hidden", !!locked[step]);
+  }
+
+  // Messages go where the eye is: into the open card, else under the form.
+  function homeErr() {
+    const err = document.getElementById("boardErr"), home = document.getElementById("boardErrHome");
+    if (err && home && err.parentNode !== home) home.appendChild(err);
+  }
+  function placeErr() {
+    const err = document.getElementById("boardErr");
+    const slot = atAnswer ? document.querySelector("#taskAnswer .task-msg") : document.querySelector("#branchList .tcard.on:not(.done) .task-msg");
+    if (err && slot) slot.appendChild(err);
+  }
+
+  // A step with cards shows its own key under the cards; the cards keep theirs.
+  function stepKey(s) {
+    if ((s.branches || []).length && s.key) return s.key;
+    return (s.branches || []).map(function (b) { return b.key || ""; }).join("") + (s.key || "");
+  }
+
+  // On a step with cards the cards lead; "Next step" appears when the step is done.
+  function syncNext() {
+    const next = document.getElementById("boardNext");
+    next.disabled = step >= steps().length - 1;
+    next.classList.toggle("ghost", !locked[step]);
+    next.classList.toggle("hidden", (cur().branches || []).length > 0 && !locked[step]);
   }
 
   function flipBoard() {
@@ -263,21 +513,24 @@
     document.getElementById("boardTitle").textContent = cur().title || "";
     document.getElementById("boardPrompt").textContent = cur().prompt || "";
     const qs = cur().questions || [];
+    const tasks = (cur().branches || []).length;
     const lead = cur().type === "stopPly" ? renderStopPly(cur().stopPly || {})
-      : cur().type === "solve" ? renderSolve(cur().solve || {})
-      : (cur().branches || []).some(function (b) { return b.write; }) ? "<div id='branchWrite'></div>" : "";
+      : cur().type === "solve" ? renderSolve(cur().solve || {}) : "";
     const figure = document.getElementById("boardFigure");
     if (figure) {
       figure.innerHTML = renderFigure(cur());
       bindFigure(figure);
     }
-    document.getElementById("boardForm").innerHTML = lead + qs.map(renderQuestion).join("");
+    stopShow();
+    homeErr();
+    document.getElementById("boardFields").innerHTML = lead +
+      (tasks && qs.length ? answerCard(qs) : qs.map(renderQuestion).join(""));
     const take = document.getElementById("boardTake");
     if (take) take.addEventListener("click", function () { fillAnswer(boardLine()); });
     document.getElementById("boardKey").classList.remove("show");
     document.getElementById("boardKey").innerHTML = "";
     document.getElementById("boardErr").textContent = "";
-    document.getElementById("boardNext").disabled = step >= steps().length - 1;
+    syncNext();
     document.getElementById("boardLock").disabled = locked[step];
     document.getElementById("boardRedo").classList.toggle("hidden", !locked[step]);
     renderBranches();
@@ -290,9 +543,9 @@
   // not required, so an empty one reaches the grader and gets "that is ply 1".
   function renderStopPly(sp) {
     return "<label>After " + esc(sp.candidate) + ", which reply stopped you?<span>One move.</span>" +
-      "<input name='scare' type='text' required></label>" +
+      "<input name='scare' type='text' required autocapitalize='off' spellcheck='false'></label>" +
       "<label>Now the moves after it<span>In order, until nothing can take back or check.</span>" +
-      "<input name='continue' type='text' placeholder='" + SPEAK + "'></label>" + takeButton();
+      "<input name='continue' type='text' autocapitalize='off' spellcheck='false' placeholder='" + SPEAK + "'></label>" + takeButton();
   }
 
   // Board entry for written lines: one click copies the board's line into the answer; Lock still grades it.
@@ -324,11 +577,18 @@
     });
   }
 
+  // How long the line is, in moves where White's and Black's each count (a ply, said plainly).
+  function lineHint(n, whose) {
+    if (n === 1) return "One move. Type it (Enter) or play it on the board.";
+    return "The " + whose + "line is " + n + " moves long, White's and Black's both count. Calculate all of it first, " +
+      "then type it (Enter) or play it on the board: at " + n + " moves it is checked by itself. Stopping earlier? Press Lock.";
+  }
+
   // Solve: write the whole line from the first move; graded ply by ply against solve.line.
   function renderSolve(sp) {
     const n = (sp.line || []).length;
-    return "<label>Your line, from the first move<span>The " + (session && session.logAs ? "book's " : "") + "line is " + n + " ply. Calculate all of it first, then type it (Enter) or play it on the board — the board checks it at " + n + " ply. Stopping earlier? Press Lock.</span>" +
-      "<input name='line' type='text' required placeholder='" + SPEAK + "'></label>" + takeButton();
+    return "<label>Your line, from the first move<span>" + lineHint(n, session && session.logAs ? "book's " : "") + "</span>" +
+      "<input name='line' type='text' required autocapitalize='off' spellcheck='false' placeholder='" + SPEAK + "'></label>" + takeButton();
   }
 
   // Grade a written line ply by ply against the main line and any accepted alternatives.
@@ -338,26 +598,27 @@
     const g = new Chess(fen);
     let live = lines;
     for (let i = 0; ; i++) {
-      const ply = i + 1;
       const done = live.find(function (l) { return l.length === i; });
       const longer = live.filter(function (l) { return l.length > i; });
       if (done && (!longer.length || i >= have.length)) return { ok: true, line: done };
       if (i >= have.length) {
         const n = Math.min.apply(null, longer.map(function (l) { return l.length; }));
         return { ok: false, at: i, miss: { result: "short", ply: i },
-          msg: "You stopped at ply " + i + ". " + noun + " is " + n + " ply. What happens next?" };
+          msg: "You stopped after " + i + (i === 1 ? " move. " : " moves. ") + noun + " is " + n + " moves long. What happens next?" };
       }
       const mv = looseMove(g, have[i]);
-      if (!mv) return { ok: false, at: i, msg: "Ply " + ply + ": " + have[i] + " is not legal there, or it is ambiguous (write Rexe5, R8xf6). Set it up on the board and look again." };
+      if (!mv) return { ok: false, at: i, msg: numbered(fen, [have[i]], i) + " is not legal there, or it is ambiguous (write Rexe5, R8xf6). Set it up on the board and look again." };
       const next = longer.filter(function (l) { return norm(l[i]) === norm(mv.san); });
       if (!next.length) {
         if (done) return { ok: true, line: done };
         if (i === 0) {
           return { ok: false, at: 0, miss: { result: "wrong" },
-            msg: "Not the first move. Before the obvious move, look for one in between: a check, a capture, a threat." };
+            msg: lines.every(function (l) { return l.length === 1; })
+              ? "Not this one. Read the task again and look for another move."
+              : "Not the first move. Before the obvious move, look for one in between: a check, a capture, a threat." };
         }
         return { ok: false, at: i, miss: { result: "short", ply: i },
-          msg: "Ply " + ply + ": " + have[i] + " leaves the line. " + (i % 2 ? "Which reply is the most testing?" : "Look again from there.") };
+          msg: numbered(fen, [mv.san], i) + " leaves the line. " + (i % 2 ? "Which reply is the most testing?" : "Look again from there.") };
       }
       live = next;
     }
@@ -411,7 +672,7 @@
     filler: { von: 1, auf: 1, nach: 1, zieht: 1, und: 1, dann: 1, zug: 1, to: 1, then: 1, and: 1, moves: 1, "weiß": 1, schwarz: 1, white: 1, black: 1 },
   };
   // Dictation needs no button: macOS dictation (fn twice) types into any answer box.
-  const SPEAK = "Nxc3 Qh8+ … or dictate: Springer schlägt c3 · zurück · reset";
+  const SPEAK = "Type moves: e4 e5 Nf3 …";
   const SAN_RE = /^(O-O-O|O-O|[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](x[a-h])?[1-8](=?[QRBN])?)[+#]?$/;
   const GERMAN_PIECE = { S: "N", L: "B", T: "R", D: "Q", K: "K" };
 
@@ -610,6 +871,7 @@
   }
 
   // Lock the active branch and keep it across reloads; true while other branches are still open.
+  // The card turns ✓ and opens its key with the way on; the board keeps the finished line to read it by.
   function lockBranch() {
     const s = cur();
     branchLocked[activeBranch] = true;
@@ -617,24 +879,12 @@
       .filter(function (b, i) { return branchLocked[i]; })
       .map(function (b) { return b.id; });
     saveProgress();
-    const key = document.getElementById("boardKey");
-    key.innerHTML = s.branches[activeBranch].key || "";
-    key.classList.add("show");
-    const nextOpen = branchLocked.indexOf(false);
-    if (nextOpen === -1) {
-      renderBranches();
-      return false;
-    }
-    // Jump to the next unplayed line; the key of the one just locked stays visible.
-    activeBranch = nextOpen;
-    game = new Chess(s.fen);
-    selected = null;
+    stopShow();
+    hintSq = null;
+    document.getElementById("boardErr").textContent = "";
     renderBranches();
     renderBoard();
-    const left = branchLocked.filter(function (x) { return !x; }).length;
-    document.getElementById("boardErr").textContent =
-      "Locked. Next: " + branchLabel(s.branches[nextOpen]) + " (" + left + " left)";
-    return true;
+    return branchLocked.indexOf(false) !== -1;
   }
 
   // The board follows what is typed or dictated into an answer box, move by move.
@@ -1354,6 +1604,10 @@
       captureAnswers(); saveProgress(); loadStep(step - 1);
       return "step " + (step + 1) + ": " + cur().name;
     }
+    if (!locked[step] && (cur().branches || []).length && !atAnswer && branchLocked[activeBranch]) {
+      const next = nextAction();
+      if (next) { next.go(); return next.label.replace(" →", ""); }
+    }
     if (step < steps().length - 1) {
       captureAnswers(); saveProgress(); loadStep(step + 1);
       return "step " + (step + 1) + ": " + cur().name;
@@ -1379,7 +1633,9 @@
     const group = session && session.group;
     const ids = group
       ? Object.keys(sessions()).filter(function (id) { return sessions()[id].group === group; }).sort()
-      : orderedIds().filter(function (id) { return !sessions()[id].group; });
+      : orderedIds().filter(function (id) {
+          return !sessions()[id].group && (sessions()[id].player || "") === ((session && session.player) || "");
+        });
     const at = ids.indexOf(sessionId);
     const order = ids.slice(at + 1).concat(ids.slice(0, Math.max(0, at)));
     return order.find(function (id) { return !sessionDone(id); }) || null;
@@ -1390,6 +1646,7 @@
   function autoCheck() {
     if (locked[step] || !game) return;
     const s = cur();
+    if ((s.branches || []).length && (branchLocked[activeBranch] || atAnswer)) return;
     const played = game.history();
     if (takesLine()) {
       let lines;
@@ -1417,6 +1674,11 @@
     const form = document.getElementById("boardForm");
     const s = cur();
     const err = document.getElementById("boardErr");
+    const cards = (s.branches || []).length > 0;
+    if (cards && !locked[step] && !atAnswer && branchLocked[activeBranch]) {
+      const next = nextAction();
+      if (next) { next.go(); return; }
+    }
     const wb = writeBranch();
     const written = ((s.type === "stopPly" || s.type === "solve") && !stopPassed) || !!wb;
     let won = false;                            // a graded line passed in this Lock: celebrate once, below
@@ -1455,15 +1717,17 @@
       // Nothing to replay by hand: the line that passed goes on the board.
       if (!historyMatches(line)) rewindTo(line, line.length);
     }
-    const need = mustPlayNow();
+    const need = cards && (branchLocked[activeBranch] || atAnswer) ? [] : mustPlayNow();
     if (!historyMatches(need)) {
       celebrateOnce();
       err.textContent = "On the board play: " + need.join(" ");
       return;
     }
-    if (s.branches && s.branches.length && !branchLocked[activeBranch]) {
+    let cardDone = false;
+    if (cards && !atAnswer && !branchLocked[activeBranch]) {
       won = true;                               // a variation played or written to its end
       if (lockBranch()) { celebrateOnce(); return; }
+      cardDone = true;
     }
     // The questions come last, so a finished line is never held up by an empty box.
     const missing = Array.from(form.querySelectorAll("[required]")).filter(function (el) {
@@ -1471,10 +1735,12 @@
     });
     if (missing.length) {
       celebrateOnce();
-      err.textContent = written || need.length || (s.branches || []).length
-        ? "Line done. Answer the questions, then press Enter or Lock."
+      if (cards && !atAnswer) { celebrateOnce(); return; }   // the solved card leads on to the questions
+      err.textContent = cards ? "Answer, then Finish step."
+        : written || need.length ? "Line done. Answer the questions, then press Enter or Lock."
         : "Fill every field.";
-      if (!fromVoice) missing[0].focus({ preventScroll: true });
+      // A card that just finished shows its key first; its button leads on to the questions.
+      if (!fromVoice && !cardDone) missing[0].focus({ preventScroll: true });
       return;
     }
     locked[step] = true;
@@ -1487,18 +1753,20 @@
       .map(function (b) { return b.id; });
     saveProgress();
     const key = document.getElementById("boardKey");
-    key.innerHTML = (s.branches || []).map(function (b) { return b.key || ""; }).join("") + (s.key || "");
+    key.innerHTML = stepKey(s);
     key.classList.add("show");
     // A host page (hosted.js) may add an engine check of the locked line — only ever after Lock.
     // Listeners (training.js) hear which step locked and whether it was right on the first try.
+    // A step with cards has no one line of his to check (the board may show any card's line); each card has its key.
     const lockInfo = { sessionId: session && session.id, stepId: stepId(step), clean: !firstMiss,
-      fen: s.fen, line: game.history(), key: key, listening: listen.on, lang: voiceLang() };
+      fen: s.fen, line: cards ? [] : game.history(), key: key, listening: listen.on, lang: voiceLang() };
     if (typeof window.PATH_AFTER_LOCK === "function") window.PATH_AFTER_LOCK(lockInfo);
     document.dispatchEvent(new CustomEvent("path:locked", { detail: lockInfo }));
     document.getElementById("boardLock").disabled = true;
     document.getElementById("boardRedo").classList.remove("hidden");
-    document.getElementById("boardNext").disabled = step >= steps().length - 1;
+    syncNext();
     document.getElementById("boardErr").textContent = "";
+    renderBranches();
     renderBoard();
     renderVariations();
     const logAs = session.logAs || {};
@@ -1586,17 +1854,27 @@
     branchLocked = (cur().branches || []).map(function (b) {
       return entry.branches.indexOf(b.id) !== -1;
     });
-    // Resume on the first line still open.
+    // Resume on the first card still open; with every card solved, on the questions (or the last card).
     activeBranch = Math.max(0, branchLocked.indexOf(false));
+    hintLevel = 0;
+    hintSq = null;
+    atAnswer = false;
+    if (branchLocked.length && branchLocked.indexOf(false) === -1 && !entry.locked) {
+      if ((cur().questions || []).length) atAnswer = true; else activeBranch = branchLocked.length - 1;
+    }
     locked[n] = !!entry.locked;
     game = new Chess(cur().fen);
+    const open = (cur().branches || [])[activeBranch];
+    if (open && open.write && !branchLocked[activeBranch] && !locked[n]) {
+      open.mustPlay.slice(0, givenOf(open)).forEach(function (m) { game.move(m, { sloppy: true }); });
+    }
     selected = null;
     renderSteps();
     restoreAnswers(entry);
+    syncAnswer();
     if (locked[n]) {
       const key = document.getElementById("boardKey");
-      key.innerHTML = (cur().branches || []).map(function (b) { return b.key || ""; }).join("")
-        + (cur().key || "");
+      key.innerHTML = stepKey(cur());
       key.classList.add("show");
     }
     renderBoard();
@@ -1618,7 +1896,7 @@
     const groups = [];
     ids.forEach(function (id) {
       const c = categoryOf(sessions()[id]);
-      const name = sessions()[id].group || (c ? "Games · " + c.label : "Games");
+      const name = sessions()[id].group || playerGroup(sessions()[id]) || (c ? "Games · " + c.label : "Games");
       let g = groups.find(function (x) { return x.name === name; });
       if (!g) { g = { name: name, ids: [] }; groups.push(g); }
       g.ids.push(id);
@@ -1779,7 +2057,7 @@
       box = form.elements["continue"];
       box.value = numbered(s.fen, moves.slice(2), 2);
     }
-    err.textContent = moves.length + " ply written from the board. Is the last one really the end? Then Lock.";
+    err.textContent = moves.length + (moves.length === 1 ? " move" : " moves") + " written from the board. Is the last one really the end? Then Lock.";
     box.focus({ preventScroll: true });
     box.setSelectionRange(box.value.length, box.value.length);
     return true;

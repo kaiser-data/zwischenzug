@@ -169,56 +169,72 @@
     location.reload();             // the board reads the new set on load
   }
 
+  // Above the board on a Training day: the level in one line, the settings one tap away.
+  // Every choice is a button (aria-pressed marks the current one); the rating is typed in place.
+  let settingsOpen = false;
   function levelBar() {
     const panel = document.getElementById("panel-session");
     const steps = document.getElementById("boardSteps");
     if (!panel || !steps || document.getElementById("trainingLevel")) return;
-    const bar = document.createElement("p");
+    const bar = document.createElement("div");
     bar.id = "trainingLevel";
-    bar.className = "muted training-level hidden";
+    bar.className = "training-level hidden";
     steps.parentNode.insertBefore(bar, steps);
+    function seg(id, attr, items, current) {
+      return '<span class="seg" id="' + id + '" role="group">' + items.map(function (it) {
+        const on = it[0] === current;
+        return '<button type="button" ' + attr + '="' + it[0] + '" aria-pressed="' + on + '">' + it[1] + "</button>";
+      }).join("") + "</span>";
+    }
     function show() {
       const t = state();
-      const id = new URLSearchParams(location.search).get("session") || (document.getElementById("sessionPick") || {}).value || "";
+      // The picker knows what is open now; the URL only at load time.
+      const id = (document.getElementById("sessionPick") || {}).value || new URLSearchParams(location.search).get("session") || "";
       bar.classList.toggle("hidden", id.indexOf("training-") !== 0);
       const waiting = Object.keys(t.missed).length;
+      const rate = '<form id="trainingRate" class="tl-rate' + (t.level && !settingsOpen ? " hidden" : "") + '">' +
+        '<label>Your rating <span class="muted">(Lichess rapid or classical, or FIDE)</span>' +
+        '<input type="number" inputmode="numeric" min="400" max="3200" step="10" value="' + (t.level || "") + '" placeholder="e.g. 1400"></label>' +
+        '<button class="btn" type="submit">' + (t.level ? "Save" : "Start") + "</button></form>";
       bar.innerHTML = (t.level
-        ? "Your level: <b>" + t.level + "</b>. Right on the first try +" + STEP + ", a miss −" + STEP + '. <a href="#" id="trainingSet">Change</a>'
-        : 'Set your rating to get positions at your level. <a href="#" id="trainingSet">Set rating</a>') +
-        '<br><span id="trainingCount">' + t.perDay + " a day</span> · " + COUNTS.filter(function (n) { return n !== t.perDay; })
-          .map(function (n) { return '<a href="#" data-count="' + n + '">' + n + "</a>"; }).join(" · ") +
-        '<br><span id="trainingDiff">' + DIFFS.map(function (d) {
-          return d[0] === t.diff ? "<b>" + d[1] + "</b>" : '<a href="#" data-diff="' + d[0] + '">' + d[1] + "</a>";
-        }).join(" · ") + "</span>" +
-        '<br><span id="trainingFocus">' + FOCUSES.map(function (f) {
-          return f[0] === t.focus ? "<b>" + f[1] + "</b>" : '<a href="#" data-focus="' + f[0] + '">' + f[1] + "</a>";
-        }).join(" · ") + "</span>" +
-        (waiting ? " · " + waiting + (waiting === 1 ? " miss comes" : " misses come") + " back to repeat" : "");
-      bar.querySelectorAll("[data-count]").forEach(function (a) {
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          setCount(parseInt(a.dataset.count, 10)).then(reloadToday);
+        ? '<p class="tl-head">Your level <b id="trainingLevelValue">' + t.level + "</b>" +
+          '<span class="muted"> · right on the first try +' + STEP + ", a miss −" + STEP +
+          (waiting ? " · " + waiting + (waiting === 1 ? " miss comes" : " misses come") + " back to repeat" : "") + "</span>" +
+          ' <button type="button" class="linkish" id="trainingSet" aria-expanded="' + settingsOpen + '">' +
+          (settingsOpen ? "Close settings" : "Settings") + "</button></p>"
+        : '<p class="tl-head"><b>Set your rating once</b> and every day brings positions near it. ' +
+          '<button type="button" class="linkish" id="trainingSet" aria-expanded="' + settingsOpen + '">' +
+          (settingsOpen ? "Close settings" : "Settings") + "</button></p>") + rate +
+        '<div class="tl-rows' + (settingsOpen ? "" : " hidden") + '">' +
+          '<div class="tl-row"><span class="tl-name">A day</span>' +
+            seg("trainingCount", "data-count", COUNTS.map(function (n) { return [n, String(n)]; }), t.perDay) + "</div>" +
+          '<div class="tl-row"><span class="tl-name">Difficulty</span>' + seg("trainingDiff", "data-diff", DIFFS, t.diff) + "</div>" +
+          '<div class="tl-row"><span class="tl-name">Focus</span>' + seg("trainingFocus", "data-focus", FOCUSES, t.focus) + "</div>" +
+          '<p class="muted tl-note">A change keeps what you solved today and picks the rest again.</p>' +
+        "</div>";
+      function on(sel, fn) {
+        bar.querySelectorAll(sel).forEach(function (b) {
+          b.addEventListener("click", function () {
+            if (b.getAttribute("aria-pressed") === "true") return;
+            fn(b).then(reloadToday);
+          });
         });
-      });
-      bar.querySelectorAll("[data-diff]").forEach(function (a) {
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          setDiff(parseInt(a.dataset.diff, 10)).then(reloadToday);
-        });
-      });
-      bar.querySelectorAll("[data-focus]").forEach(function (a) {
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          setFocus(a.dataset.focus).then(reloadToday);
-        });
-      });
-      document.getElementById("trainingSet").addEventListener("click", function (e) {
+      }
+      on("[data-count]", function (b) { return setCount(parseInt(b.dataset.count, 10)); });
+      on("[data-diff]", function (b) { return setDiff(parseInt(b.dataset.diff, 10)); });
+      on("[data-focus]", function (b) { return setFocus(b.dataset.focus); });
+      const toggle = document.getElementById("trainingSet");
+      if (toggle) toggle.addEventListener("click", function () { settingsOpen = !settingsOpen; show(); });
+      const form = document.getElementById("trainingRate");
+      form.addEventListener("submit", function (e) {
         e.preventDefault();
-        const raw = window.prompt("Your rating (FIDE, or Lichess classical/rapid):", t.level || START);
-        const n = parseInt(raw, 10);
-        if (!n || n < 400 || n > 3200) return;
+        const input = form.querySelector("input");
+        const n = parseInt(input.value, 10);
+        if (!n || n < 400 || n > 3200) { input.setCustomValidity("A rating between 400 and 3200."); input.reportValidity(); return; }
+        if (n === t.level) { settingsOpen = false; show(); return; }
         setLevel(n).then(reloadToday);
       });
+      form.querySelector("input").addEventListener("input", function (e) { e.target.setCustomValidity(""); });
     }
     show();
     redrawBar = show;
@@ -242,6 +258,19 @@
     redrawBar();
   });
 
+  // An invitee's own game comes first until every step of it is locked; then Training.
+  function unfinishedOwnGame(st) {
+    const viewer = window.PATH_VIEWER;
+    const all = window.PATH_SESSIONS || {};
+    if (!viewer || !viewer.player) return "";
+    return Object.keys(all).filter(function (id) { return all[id].player === viewer.player; })
+      .sort(function (a, b) { return String(all[b].date || "").localeCompare(String(all[a].date || "")); })
+      .find(function (id) {
+        const steps = ((st.progress || {})[id] || {}).steps || {};
+        return (all[id].steps || []).some(function (x) { return !(steps[x.id] && steps[x.id].locked); });
+      }) || "";
+  }
+
   window.PathTraining = {
     START: START,
     STEP: STEP,
@@ -249,13 +278,19 @@
     // Called by index.html once the store is hydrated, before the board renders.
     prepare: function (s) {
       store = s;
+      const viewer = window.PATH_VIEWER;
+      const player = viewer && (window.PATH_PLAYERS || {})[viewer.player];
+      if (player && player.level && !state().level) {
+        state().level = clamp(player.level);
+        store.commit();
+      }
       const session = register();
       if (!session) return;
       const q = new URLSearchParams(location.search);
       let guest = false;
       try { guest = localStorage.getItem("zz_role") === "guest"; } catch (err) { guest = false; }
       if (q.get("session") === "training-today" || (!q.get("session") && guest)) {
-        q.set("session", session.id);
+        q.set("session", (!q.get("session") && unfinishedOwnGame(s.state)) || session.id);
         history.replaceState(null, "", location.pathname + "?" + q.toString() + location.hash);
       }
       levelBar();

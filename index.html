@@ -356,17 +356,72 @@
   .key { display: none; margin-top: 12px; padding: 10px 12px; background: #fff7e6; border-left: 4px solid var(--gold); }
   .key.show { display: block; }
   .err { color: var(--leak); font-size: .9rem; min-height: 1.1em; }
-  .branches { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
-  .branch {
-    background: rgba(255,255,255,.55);
-    border: 1px solid rgba(28,23,18,.25);
-    padding: 6px 10px;
-    cursor: pointer;
-    font-size: .9rem;
-  }
-  .branch.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .branch.done { border-color: var(--stamp); color: var(--stamp); }
-  .training-level { margin: 0 0 8px; }
+  /* Task cards: one at a time, like levels. Dots on top show done / now / locked; ‹ › go back to solved ones. */
+  .tasks { margin: 12px 0 10px; }
+  .tnav { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; }
+  .tdots { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; justify-content: center; }
+  .tdot { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid rgba(28,23,18,.3); background: transparent;
+    font: inherit; font-size: .85rem; font-weight: 600; color: var(--muted); cursor: pointer; padding: 0; }
+  .tdot.done { background: var(--stamp); border-color: var(--stamp); color: var(--paper); }
+  .tdot.on { box-shadow: 0 0 0 3px var(--gold); color: var(--ink); border-color: var(--ink); }
+  .tdot.on.done { color: var(--paper); }
+  .tdot.locked { opacity: .35; cursor: default; border-style: dashed; }
+  .tnav-arrow { width: 44px; height: 44px; border: 1px solid rgba(28,23,18,.2); border-radius: 50%; background: rgba(255,255,255,.5);
+    font-size: 1.4rem; line-height: 1; color: var(--ink); cursor: pointer; }
+  .tnav-arrow:disabled { opacity: .3; cursor: default; }
+  .tdot:focus-visible, .tnav-arrow:focus-visible { outline: 2px solid var(--leak); outline-offset: 2px; }
+  .tcard { border: 1.5px solid var(--ink); border-radius: 12px; background: #fffdf7; box-shadow: 0 2px 14px rgba(28,23,18,.12);
+    animation: tcard-in .25s ease; }
+  .tcard.done { border-color: var(--stamp); }
+  @keyframes tcard-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .tcard { animation: none; } }
+  .task-head { padding: 12px 14px 4px; }
+  .task-title { display: block; font-size: 1.08rem; font-weight: 600; line-height: 1.3; }
+  .task-kind { display: block; font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .task-kind[data-kind="find"] { color: var(--leak); }
+  .task-kind[data-kind="line"] { color: #8a5a12; }
+  .task-kind[data-kind="watch"], .task-kind[data-kind="answer"] { color: var(--stamp); }
+  .task-body { padding: 4px 14px 14px; }
+  .task-do { margin: 0 0 10px; }
+  .task-win { margin: 0 0 8px; font-weight: 700; color: var(--stamp); font-size: 1.05rem; }
+  .task-key { padding: 8px 10px; background: #fff7e6; border-left: 4px solid var(--gold); }
+  .task-key p { margin: 0 0 6px; }
+  .task-key p:last-child { margin: 0; }
+  .task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  .task-actions .btn { min-height: 44px; padding-left: 16px; padding-right: 16px; }
+  .task-go { background: var(--stamp); }
+  .task-msg .err { margin: 8px 0 0; }
+  .task-tip { margin: 8px 0 0; color: #8a5a12; font-size: .95rem; min-height: 0; }
+  .task-tip:empty { display: none; }
+  .task-answer label { margin-top: 0; }
+  .sq.hint-from { box-shadow: inset 0 0 0 4px var(--gold); }
+  .training-level { margin: 0 0 12px; }
+  .tour { position: fixed; inset: 0; z-index: 60; }
+  .tour.tour-dim { background: rgba(20, 16, 12, .6); }
+  .tour-ring { position: fixed; border-radius: 8px; box-shadow: 0 0 0 3px var(--gold), 0 0 0 9999px rgba(20, 16, 12, .6); pointer-events: none; transition: all .2s ease; }
+  .tour-card { position: fixed; width: min(340px, calc(100vw - 24px)); background: var(--paper); color: var(--ink); border-radius: 10px; padding: 14px 16px 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); }
+  .tour-card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+  .tour-card .tour-text { margin: 0 0 12px; line-height: 1.45; }
+  .tour-count { margin: 0 0 2px; font-size: .8rem; color: var(--muted); }
+  .tour-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tour-row button { min-height: 40px; padding: 6px 14px; border-radius: 8px; font: inherit; cursor: pointer; border: 1px solid rgba(28,23,18,.25); background: transparent; color: var(--ink); }
+  .tour-row .tour-next { background: var(--stamp); color: var(--paper); border-color: var(--stamp); }
+  .tour-row .tour-skip { border: 0; text-decoration: underline; padding-left: 0; color: var(--muted); }
+  .tour-row button:disabled { opacity: .4; cursor: default; }
+  @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } }
+  .training-level .tl-head { margin: 0 0 6px; }
+  .linkish { background: none; border: 0; padding: 2px 0; font: inherit; color: var(--stamp); text-decoration: underline; cursor: pointer; }
+  .tl-rate { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin: 6px 0 10px; }
+  .tl-rate label { display: flex; flex-direction: column; gap: 4px; font-size: .95rem; }
+  .tl-rate input { width: 9em; }
+  .tl-rows { padding: 10px 12px; margin: 0 0 10px; border: 1px solid rgba(28,23,18,.15); background: rgba(255,255,255,.35); }
+  .tl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; }
+  .tl-name { min-width: 5.5em; color: var(--muted); font-size: .9rem; }
+  .tl-note { margin: 4px 0 0; font-size: .85rem; }
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .seg button { min-height: 36px; padding: 4px 10px; border: 1px solid rgba(28,23,18,.25); background: rgba(255,255,255,.5); color: var(--ink); font: inherit; font-size: .92rem; cursor: pointer; border-radius: 6px; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); cursor: default; }
+  .seg button:focus-visible, .linkish:focus-visible { outline: 2px solid var(--leak); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -469,14 +524,16 @@
             <h2 id="boardTitle"></h2>
             <p id="boardPrompt" class="muted"></p>
             <div id="boardFigure"></div>
-            <div class="branches hidden" id="branchList"></div>
-            <form id="boardForm" autocomplete="off"></form>
-            <p class="err" id="boardErr"></p>
+            <form id="boardForm" autocomplete="off">
+              <div class="tasks hidden" id="branchList"></div>
+              <div id="boardFields"></div>
+            </form>
+            <div id="boardErrHome"><p class="err" id="boardErr" aria-live="polite"></p></div>
             <div class="key" id="boardKey"></div>
             <div class="row">
               <button class="btn" type="button" id="boardLock">Lock answers</button>
               <button class="btn ghost hidden" type="button" id="boardRedo" title="Solve this step again">↺ Redo</button>
-              <button class="btn ghost" type="button" id="boardNext" disabled>Next</button>
+              <button class="btn ghost" type="button" id="boardNext" disabled>Next step →</button>
             </div>
           </div>
         </div>
@@ -646,6 +703,7 @@
 
       <footer class="sheet-foot">
         Local dossier. Data stays in this browser. Sources in REFERENCES.md. Not a FIDE application.
+        <button type="button" class="linkish" id="tourOpen">Board tour</button>
       </footer>
     </div>
   </div>
@@ -655,9 +713,11 @@
 <script src="pieces.js"></script>
 <script src="sessions/bundle.js"></script>
 <script src="sessions/puzzles.js"></script>
+<script src="sessions/players.js"></script>
 <script src="training.js"></script>
 <script src="sessions/private/bundle.js"></script>
 <script src="session-board.js"></script>
+<script src="tour.js"></script>
 <script>
 (function () {
   const KEY = "chess_path_to_v1";

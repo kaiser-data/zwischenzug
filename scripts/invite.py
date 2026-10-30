@@ -3,12 +3,14 @@
 
     python3 scripts/invite.py anna@example.com bert@example.com      # invite, 7 days each
     python3 scripts/invite.py --me                                   # a fresh link for the owner (15 min)
+    python3 scripts/invite.py --hash nico@example.com                # the line for sessions/players.js
 
 Each person gets their own one-time link (the server keeps only a hash). The page lands in
 invites/ (gitignored: the links are keys) and opens in the browser. Scan from the screen, or
 tap "Copy link" / "Share" to send it by WhatsApp or iMessage.
 """
 import datetime
+import hashlib
 import html
 import io
 import pathlib
@@ -18,6 +20,14 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "invites"
 OWNER = "martinkaiser.bln@googlemail.com"
+
+
+def email_hash(email: str) -> str:
+    """sha256 of the address as the server and sessions/players.js see it (lowercase, googlemail = gmail)."""
+    email = email.strip().lower()
+    if email.endswith("@googlemail.com"):
+        email = email[: -len("@googlemail.com")] + "@gmail.com"
+    return hashlib.sha256(email.encode()).hexdigest()
 
 
 def link_for(email: str, invite: bool) -> str:
@@ -75,6 +85,10 @@ def main() -> None:
     args = sys.argv[1:]
     if not args:
         raise SystemExit(__doc__)
+    if args[0] == "--hash":
+        for a in args[1:]:
+            print(f"{a.lower()}  {email_hash(a)}")
+        return
     rows = []
     for a in args:
         if a == "--me":
