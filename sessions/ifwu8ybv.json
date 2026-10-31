@@ -1,0 +1,222 @@
+{
+  "id": "ifwu8ybv",
+  "url": "https://lichess.org/ifwu8ybv",
+  "player": "ferho",
+  "title": "Your rapid win vs Zap_El · you Black · Scandinavian",
+  "date": "2026-09-29",
+  "result": "0-1",
+  "event": "Lichess rapid 15+10 · Zap_El 1661 (White) vs Ferho36 1639 (Black) · White resigned on move 20",
+  "startFen": "r3kb1r/pppnpppp/5n2/q6b/3P4/2N2N1P/PPP1BPP1/R1BQ1RK1 b kq - 4 8",
+  "logNote": "Ferho's attacking win: honest about the risky moments (8…O-O-O, the h-file pawn), celebrating the finish (…Rxe4!, …Nf3+). Objectively White was better until 17.Ne4??; 17.Bg5! was the only defence.",
+  "steps": [
+    {
+      "id": "king",
+      "name": "1 Where does the king go?",
+      "title": "Move 8 · Black to move · White has castled short",
+      "prompt": "Your queen stands on a5 and your knights are out. In the game you played 8…O-O-O. Find a quieter move that gets your king safe on the short side first.",
+      "fen": "r3kb1r/pppnpppp/5n2/q6b/3P4/2N2N1P/PPP1BPP1/R1BQ1RK1 b kq - 4 8",
+      "questions": [
+        {
+          "name": "why",
+          "type": "select",
+          "label": "1.1 Why is 8…O-O-O risky here?",
+          "options": [
+            { "value": "", "label": "choose" },
+            { "value": "storm", "label": "My king and queen stand together on the queenside, and White's a- and b-pawns can attack both with gain of time" },
+            { "value": "rook", "label": "The rook on d8 has nothing to do" },
+            { "value": "nothing", "label": "It isn't risky" }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "e6",
+          "label": "8…e6",
+          "write": true,
+          "given": 0,
+          "ask": "the quiet move that prepares short castling",
+          "mustPlay": ["e6"],
+          "alts": [["c6"]],
+          "key": "<p class='ok'><b>8…e6</b>. The bishop on f8 can come out (…Be7) and the king castles short, where no white pawn is coming. (8…c6, giving the queen a way back to c7 and d8, is just as good.) The engine calls it almost level.</p>"
+        },
+        {
+          "id": "storm",
+          "label": "8…O-O-O 9.Bd2 a6 10.g4 Bg6 11.a4 Kb8 12.b4 · the pawns come",
+          "mustPlay": ["O-O-O", "Bd2", "a6", "g4", "Bg6", "a4", "Kb8", "b4"],
+          "key": "<p class='ok'><b>8…O-O-O 9.Bd2!</b> The bishop now lines up with your queen behind the c3 knight: any knight jump uncovers an attack on a5. Then a4 and b4 follow, each with tempo on the queen, and your king stands right behind it. White is clearly better (the engine says about +2.5). In the game your opponent played 9.Ng5 instead and gave you chances.</p>"
+        }
+      ],
+      "key": "<p><b>Set-up idea:</b> before you castle long, look where the opponent's pawns can run. With the queen on a5 and the king on c8, every pawn move a4, b4 hits something. Short castling first, attack later.</p>"
+    },
+    {
+      "id": "recapture",
+      "name": "2 Take back towards the h-file",
+      "title": "After 11.Bxg6 · Black to move · which pawn takes?",
+      "prompt": "White's bishop just took on g6 and his knight on g5 is still attacked by your h6 pawn. Two pawns can take on g6. One takes with tempo, the other walks into a fork. Find the right one, then find the fork after the wrong one.",
+      "fen": "2kr1b1r/pppnppp1/5nBp/q5N1/3P4/2N4P/PPP2PP1/R1BQ1RK1 b - - 0 11",
+      "questions": [
+        {
+          "name": "gain",
+          "type": "select",
+          "label": "2.1 After 11…hxg5 12.Bxf7 White is a pawn up. What did you get for it?",
+          "options": [
+            { "value": "", "label": "choose" },
+            { "value": "file", "label": "The h-file is open towards h3 and the white king, and my rook on h8 is already on it" },
+            { "value": "piece", "label": "A piece" },
+            { "value": "nothing", "label": "Nothing" }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "hxg5",
+          "label": "11…hxg5",
+          "write": true,
+          "given": 0,
+          "ask": "the right recapture",
+          "mustPlay": ["hxg5"],
+          "key": "<p class='ok'><b>11…hxg5!</b> You take the knight, not the bishop: the h-file opens for your rook on h8. White takes back a pawn with 12.Bxf7, but now the rook looks at h3 and the white king. That was the plan of your whole game.</p>"
+        },
+        {
+          "id": "fxg6",
+          "label": "11…fxg6? · the fork",
+          "write": true,
+          "given": 1,
+          "ask": "White's knight jump",
+          "mustPlay": ["fxg6", "Nf7"],
+          "alts": [["fxg6", "Ne6"]],
+          "key": "<p class='ok'><b>11…fxg6? 12.Nf7!</b> The knight attacks both rooks, d8 and h8. White wins the exchange and is winning (the engine says +6.6). (12.Ne6, hitting d8 and the pawn on c7, is almost as strong.) Before you recapture, check every knight jump the opponent gets.</p>"
+        }
+      ],
+      "key": "<p><b>Tactic habit:</b> when two pieces can take, look at what each recapture <i>opens</i> and what it <i>allows</i>. hxg5 opened your rook's file; fxg6 opened f7 for a fork.</p>"
+    },
+    {
+      "id": "sac",
+      "name": "3 Bring more pieces first",
+      "title": "Move 14 · Black to move · the rook looks at h3",
+      "prompt": "White's bishop has come back to h3. In the game you gave the rook at once: 14…Rxh3 15.gxh3. Brave, and it worked. The engine likes a pawn move first that brings your queen and bishop into the attack. Find it.",
+      "fen": "2kr1b1r/pppnp1p1/5n2/q7/3P4/2N4B/PPP2PP1/R1BQ1RK1 b - - 0 14",
+      "questions": [
+        {
+          "name": "sacwhy",
+          "type": "select",
+          "label": "3.1 After …Rxh3 gxh3, what makes the sacrifice work in practice?",
+          "options": [
+            { "value": "", "label": "choose" },
+            { "value": "king", "label": "White's king has no pawn shield, and my queen and knights can reach h3, f3 and g4" },
+            { "value": "material", "label": "I win the material back at once" },
+            { "value": "mate", "label": "It is forced mate" }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "e5",
+          "label": "14…e5",
+          "write": true,
+          "given": 0,
+          "ask": "the pawn move that opens lines for your queen and bishop",
+          "mustPlay": ["e5"],
+          "alts": [["Rxh3"]],
+          "key": "<p class='ok'><b>14…e5</b>. The bishop on f8 sees c5 and the queen can swing to e5 and f5. (14…Rxh3, your move in the game, is also fine: the engine rates both about the same.) White stays better on paper, but now every black piece joins the attack.</p>"
+        },
+        {
+          "id": "line",
+          "label": "14…e5 15.dxe5 Qxe5 16.Re1 Qa5 17.Bf4 Rxh3 18.gxh3 · the same sacrifice, later",
+          "mustPlay": ["e5", "dxe5", "Qxe5", "Re1", "Qa5", "Bf4", "Rxh3", "gxh3"],
+          "key": "<p class='ok'>The engine's line: queen in first, then <b>…Rxh3</b> anyway, and …Qf5 comes next towards h3. Same idea as in your game, with one more piece ready. A good rule for attacks: count the pieces that can join before you sacrifice.</p>"
+        }
+      ],
+      "key": "<p><b>Attacking idea:</b> your sacrifice on h3 was right in spirit: White's king lost its pawns and was never safe again. To make a sacrifice stronger, bring one more piece first, if the opponent can't close the door in the meantime.</p>"
+    },
+    {
+      "id": "defence",
+      "name": "4 White's only defence",
+      "title": "After 16…Rxd4 · White to move · stop the knight fork",
+      "prompt": "Now you are White. Black's knight on e5 wants to jump to f3 with check, attacking your queen on e2. In the game White played 17.Ne4?? and lost. Find the only move that keeps White better.",
+      "fen": "2k2b2/ppp1p1p1/5n2/q3n3/3r4/2N4P/PPP1QP2/R1B2RK1 w - - 0 17",
+      "questions": [],
+      "branches": [
+        {
+          "id": "bg5",
+          "label": "17.Bg5",
+          "write": true,
+          "given": 0,
+          "ask": "White's defence",
+          "mustPlay": ["Bg5"],
+          "key": "<p class='ok'><b>17.Bg5!</b> It attacks the knight on f6 and gets the bishop off c1. If 17…Nf3+ 18.Qxf3! Qxg5+ 19.Qg3, the queen is safe and White is still the exchange up.</p>"
+        },
+        {
+          "id": "bg5-line",
+          "label": "17.Bg5 Nf3+ 18.Qxf3 Qxg5+ 19.Qg3 · the fork is defused",
+          "mustPlay": ["Bg5", "Nf3+", "Qxf3", "Qxg5+", "Qg3"],
+          "key": "<p class='ok'>The knight is taken, the bishop is lost, but White's queen survives and White keeps an extra exchange. Your opponent didn't see …Nf3+ coming. That is why practical attacks work: one natural move like 17.Ne4 and it is over.</p>"
+        }
+      ],
+      "key": "<p><b>Defence habit:</b> when the opponent's knight has a square that checks and hits your queen, deal with that square <i>now</i>. 17.Ne4?? ignored f3, and step 5 shows what happened.</p>"
+    },
+    {
+      "id": "finish",
+      "name": "5 The finish",
+      "title": "After 17.Ne4 · Black to move · your moment",
+      "prompt": "White just put his knight on e4. Only one move wins. Find it, then write the whole line to the end: White's best try is 18.Qd2, and you have a knight check.",
+      "fen": "2k2b2/ppp1p1p1/5n2/q3n3/3rN3/7P/PPP1QP2/R1B2RK1 b - - 1 17",
+      "questions": [
+        {
+          "name": "pattern",
+          "type": "select",
+          "label": "5.1 What is 19…Nxd2 after 18.Qd2 Nf3+ 19.Kg2?",
+          "options": [
+            { "value": "", "label": "choose" },
+            { "value": "fork", "label": "A knight fork: the check on f3 hit the king and the queen at the same time" },
+            { "value": "pin", "label": "A pin" },
+            { "value": "mate", "label": "Mate" }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "id": "rxe4",
+          "label": "17…Rxe4",
+          "write": true,
+          "given": 0,
+          "ask": "the winning move",
+          "mustPlay": ["Rxe4"],
+          "key": "<p class='ok'><b>17…Rxe4!</b> The rook takes the knight, and if 18.Qxe4 Nxe4 your f6 knight simply takes the queen. Every other move lets White off (the engine: from about +4 for White to −6.5).</p>"
+        },
+        {
+          "id": "fork",
+          "label": "17…Rxe4 18.Qd2 · write it to the end",
+          "write": true,
+          "given": 2,
+          "ask": "your check and how it ends",
+          "mustPlay": ["Rxe4", "Qd2", "Nf3+", "Kg2", "Nxd2"],
+          "key": "<p class='ok'><b>18…Nf3+! 19.Kg2 Nxd2</b>. The knight checks and hits the queen: <b>fork</b>. (19.Kh1?? is even worse: …Qf5 and mate follows.) After 20.Bxd2 you are a rook up and White resigned on move 20. You saw the whole thing.</p>"
+        }
+      ],
+      "key": "<p><b>Tactic pattern: the knight fork with check.</b> Look for squares where your knight gives check <i>and</i> attacks the queen. Here f3 was that square for three moves. You kept it in mind and struck when it worked.</p>"
+    },
+    {
+      "id": "takeaways",
+      "name": "6 Your three habits",
+      "title": "What to take into the next game",
+      "prompt": "A brave game with a sharp finish. Pick the habit you want to keep. There is no wrong answer, it is for you.",
+      "fen": "2k2b2/ppp1p1p1/5n2/q7/4r3/7P/PPPB1PK1/R4R2 b - - 0 20",
+      "mustPlay": [],
+      "questions": [
+        {
+          "name": "habit",
+          "type": "select",
+          "label": "6.1 Which habit first?",
+          "options": [
+            { "value": "", "label": "choose" },
+            { "value": "castle", "label": "Before castling long: where can the opponent's pawns run?" },
+            { "value": "pieces", "label": "Before a sacrifice: count the pieces that can join" },
+            { "value": "forks", "label": "Every move: which squares give my knight check plus an attack on the queen?" }
+          ]
+        }
+      ],
+      "key": "<p><b>What went well:</b> you opened the h-file on purpose, gave material to strip White's king, and found …Rxe4! and …Nf3+ the moment White slipped. That is real attacking chess.</p><p><b>What to watch:</b> 8…O-O-O put your king in front of White's pawns, and until move 17 White was better. Safe king first, then attack with every piece.</p><p><b>Next:</b> open <b>Training</b> in the game list. Every day you get a few positions from real Lichess games near your rating. Write the whole line, both sides, until nothing more is taken, then Lock.</p>"
+    }
+  ]
+}

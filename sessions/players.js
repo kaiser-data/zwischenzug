@@ -4,7 +4,8 @@
 // made with `python3 scripts/invite.py --hash <email>`.
 (function () {
   window.PATH_PLAYERS = {
-    nico: { name: "Nico", level: 1350, emails: [] }
+    nico: { name: "Nico", level: 1350, emails: [] },
+    ferho: { name: "Ferho", level: 1600, emails: [] }
   };
 
   function canonical(email) {
