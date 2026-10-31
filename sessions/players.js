@@ -5,7 +5,7 @@
 (function () {
   window.PATH_PLAYERS = {
     nico: { name: "Nico", level: 1350, emails: [] },
-    ferho: { name: "Ferho", level: 1600, emails: [] }
+    ferho: { name: "Ferho", level: 1600, emails: ["e15288627ee7b72b6d39a208db6e9f2649291e6b3a20a6a36638fd65f681563e"] }
   };
 
   function canonical(email) {
