@@ -22,6 +22,9 @@ class Db:
         self.lock = threading.Lock()
         with self.lock:
             self.conn.executescript(SCHEMA)
+            cols = [r[1] for r in self.conn.execute("pragma table_info(login_tokens)")]
+            if "reusable" not in cols:      # volumes made before beta links
+                self.conn.execute("alter table login_tokens add column reusable integer not null default 0")
 
     def _run(self, sql: str, args: tuple = ()) -> list[tuple]:
         with self.lock, self.conn:
@@ -38,16 +41,16 @@ class Db:
     def is_invited(self, email: str) -> bool:
         return bool(self._run("select 1 from invites where email = ?", (email,)))
 
-    def add_token(self, email: str, token_hash: str, expires: float) -> None:
-        self._run("insert into login_tokens (hash, email, created, expires) values (?, ?, ?, ?)",
-                  (token_hash, email, time.time(), expires))
+    def add_token(self, email: str, token_hash: str, expires: float, reusable: bool = False) -> None:
+        self._run("insert into login_tokens (hash, email, created, expires, reusable) values (?, ?, ?, ?, ?)",
+                  (token_hash, email, time.time(), expires, int(reusable)))
 
     def take_token(self, token_hash: str, now: float) -> str | None:
-        """The email a link belongs to — once, and only before it expires."""
+        """The email a link belongs to — once (a beta link: every time), and only before it expires."""
         with self.lock, self.conn:
-            row = self.conn.execute("select email, expires, used from login_tokens where hash = ?",
+            row = self.conn.execute("select email, expires, used, reusable from login_tokens where hash = ?",
                                     (token_hash,)).fetchone()
-            if not row or row[2] or row[1] < now:
+            if not row or (row[2] and not row[3]) or row[1] < now:
                 return None
             self.conn.execute("update login_tokens set used = 1 where hash = ?", (token_hash,))
             return row[0]

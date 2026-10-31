@@ -56,6 +56,26 @@ def test_tokens_are_single_use_and_expire(tmp_path):
     assert db.recent_tokens("a@x.de", since=0.0) == 2
 
 
+def test_beta_tokens_work_again_until_they_expire(tmp_path):
+    db = Db(tmp_path / "zz.db")
+    db.add_token("b@x.de", "hb", expires=100.0, reusable=True)
+    assert db.take_token("hb", now=10.0) == "b@x.de"
+    assert db.take_token("hb", now=20.0) == "b@x.de"
+    assert db.take_token("hb", now=101.0) is None
+
+
+def test_old_volume_gets_the_reusable_column(tmp_path):
+    import sqlite3
+    old = sqlite3.connect(tmp_path / "zz.db")
+    old.execute("create table login_tokens (hash text primary key, email text not null, created real not null,"
+                " expires real not null, used integer not null default 0)")
+    old.execute("insert into login_tokens values ('h', 'a@x.de', 0, 100, 0)")
+    old.commit(); old.close()
+    db = Db(tmp_path / "zz.db")
+    assert db.take_token("h", now=1.0) == "a@x.de"
+    assert db.take_token("h", now=1.0) is None
+
+
 def test_progress_conflict(tmp_path):
     db = Db(tmp_path / "zz.db")
     assert db.get_progress("a@x.de") is None

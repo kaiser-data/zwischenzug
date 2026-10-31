@@ -22,6 +22,7 @@ COOKIE = "zz_session"
 MAX_AGE = 30 * 24 * 3600
 LINK_TTL = 15 * 60
 INVITE_TTL = 7 * 24 * 3600
+BETA_TTL = 30 * 24 * 3600   # beta testers: one personal link that works on every device
 log = logging.getLogger("zz.auth")
 router = APIRouter(prefix="/api/auth")
 
@@ -46,10 +47,10 @@ def allowed(request: Request, email: str) -> bool:
     return request.app.state.settings.is_allowed(email) or request.app.state.db.is_invited(email)
 
 
-def new_link(db, site_url: str, email: str, ttl: float) -> str:
-    """A one-time sign-in link for `email`, valid `ttl` seconds."""
+def new_link(db, site_url: str, email: str, ttl: float, reusable: bool = False) -> str:
+    """A sign-in link for `email`, valid `ttl` seconds: once, or as often as needed when `reusable`."""
     token = secrets.token_urlsafe(32)
-    db.add_token(email, _hash(token), time.time() + ttl)
+    db.add_token(email, _hash(token), time.time() + ttl, reusable)
     return f"{site_url}/api/auth/verify?t={token}"
 
 

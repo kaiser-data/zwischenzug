@@ -4,6 +4,7 @@
     python3 scripts/invite.py anna@example.com bert@example.com      # invite, 7 days each
     python3 scripts/invite.py --me                                   # a fresh link for the owner (15 min)
     python3 scripts/invite.py --hash nico@example.com                # the line for sessions/players.js
+    python3 scripts/invite.py --beta ferho@beta.zwischenzug          # beta: reusable link, 30 days, any device
 
 Each person gets their own one-time link (the server keeps only a hash). The page lands in
 invites/ (gitignored: the links are keys) and opens in the browser. Scan from the screen, or
@@ -30,8 +31,9 @@ def email_hash(email: str) -> str:
     return hashlib.sha256(email.encode()).hexdigest()
 
 
-def link_for(email: str, invite: bool) -> str:
-    cmd = ["railway", "ssh", "--", "python", "-m", "server.login_link"] + (["--invite"] if invite else []) + [email]
+def link_for(email: str, invite: bool, beta: bool = False) -> str:
+    flag = ["--beta"] if beta else ["--invite"] if invite else []
+    cmd = ["railway", "ssh", "--", "python", "-m", "server.login_link"] + flag + [email]
     out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
     lines = [ln.strip() for ln in out.stdout.splitlines() if ln.strip().startswith("https://")]
     if out.returncode or not lines:
@@ -89,10 +91,15 @@ def main() -> None:
         for a in args[1:]:
             print(f"{a.lower()}  {email_hash(a)}")
         return
+    beta = "--beta" in args
     rows = []
     for a in args:
+        if a == "--beta":
+            continue
         if a == "--me":
             rows.append((OWNER, link_for(OWNER, invite=False), "Owner sign-in · valid 15 minutes"))
+        elif beta:
+            rows.append((a.lower(), link_for(a, invite=True, beta=True), "Beta link · works on every device for 30 days"))
         else:
             rows.append((a.lower(), link_for(a, invite=True), "Invite · valid 7 days"))
     OUT.mkdir(exist_ok=True)

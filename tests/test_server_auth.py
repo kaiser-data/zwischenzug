@@ -111,3 +111,17 @@ def test_login_link_script(settings, monkeypatch, capsys):
     assert capsys.readouterr().out.startswith("https://zz.test/api/auth/verify?t=")
     monkeypatch.setattr(sys, "argv", ["login_link", STRANGER])
     login_link.main()                    # now invited: a plain link works too
+    monkeypatch.setattr(sys, "argv", ["login_link", "--beta", "beta@x.de"])
+    login_link.main()
+
+
+def test_beta_link_signs_in_again_on_another_device(client):
+    from server.auth import BETA_TTL, new_link
+    db = client.app.state.db
+    db.add_invite("beta@x.de", OWNER)
+    path = new_link(db, "", "beta@x.de", BETA_TTL, reusable=True)
+    for _ in range(2):                   # phone, then laptop
+        client.cookies.clear()
+        r = client.get(path, follow_redirects=False)
+        assert r.headers["location"] == "/"
+        assert client.get("/api/auth/me").json()["email"] == "beta@x.de"
