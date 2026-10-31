@@ -135,12 +135,15 @@
     if (!me.owner && window.pathTour) window.pathTour.maybeStart();
     const sheetFoot = document.querySelector(".sheet-foot");
     if (sheetFoot && sheetFoot.firstChild && sheetFoot.firstChild.nodeType === 3) {
-      sheetFoot.firstChild.textContent ="Your progress is saved to your account, so phone and computer stay in step. Voice and the engine check run on the Zwischenzug server. ";
+      sheetFoot.firstChild.textContent ="Your progress is saved to your account, on phone and computer alike. ";
     }
     const foot = document.querySelector(".sheet-foot") || document.body;
     const line = document.createElement("div");
     line.className = "zz-me";
-    line.innerHTML = '<a href="/welcome.html">How it works</a> · Signed in as ' + me.email.replace(/</g, "&lt;") +
+    // An invited player sees their name, not the internal address behind a link-only invite.
+    const p = window.PATH_VIEWER && (window.PATH_PLAYERS || {})[window.PATH_VIEWER.player];
+    const who = p ? p.name : me.email;
+    line.innerHTML = '<a href="/welcome.html">How it works</a> · Signed in as ' + who.replace(/</g, "&lt;") +
       (me.owner ? ' · <a href="#" id="zzInvite">invite someone</a>' : "") + ' · <a href="#" id="zzOut">sign out</a>';
     foot.appendChild(line);
     if (me.owner) document.getElementById("zzInvite").addEventListener("click", function (e) { e.preventDefault(); invitePanel(); });

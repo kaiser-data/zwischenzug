@@ -197,10 +197,11 @@
   });
   fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : null; }).then(function (me) {
     if (!me) return;
-    document.getElementById("who").textContent = "Signed in as " + me.email + ".";
     // The board reads these before it draws, so an invitee's first view already shows their own games.
     const player = me.owner || !window.pathPlayerOf ? Promise.resolve("") : window.pathPlayerOf(me.email);
     return player.then(function (id) {
+      const p = (window.PATH_PLAYERS || {})[id];
+      document.getElementById("who").textContent = "Signed in as " + (p ? p.name : me.email) + ".";
       try {
         localStorage.setItem("zz_role", me.owner ? "owner" : "guest");
         localStorage.setItem("zz_player", id);
