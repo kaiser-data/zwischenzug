@@ -6,7 +6,7 @@
   window.PATH_PLAYERS = {
     nico: { name: "Nico", level: 1350, emails: [] },
     ferho: { name: "Ferho", level: 1600, emails: ["e15288627ee7b72b6d39a208db6e9f2649291e6b3a20a6a36638fd65f681563e"] },
-    fabian: { name: "Fabian", level: 2200, emails: ["a840c60708168d29679f5f6c26169f7aefc0a99f067fcd382ca72a4fb0029e2d"] }
+    jfkjmh: { name: "jfkjmh", level: 2200, emails: ["a840c60708168d29679f5f6c26169f7aefc0a99f067fcd382ca72a4fb0029e2d"] }
   };
 
   function canonical(email) {
