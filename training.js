@@ -280,10 +280,9 @@
       store = s;
       const viewer = window.PATH_VIEWER;
       const player = viewer && (window.PATH_PLAYERS || {})[viewer.player];
-      if (player && player.level && !state().level) {
-        state().level = clamp(player.level);
-        store.commit();
-      }
+      // First visit: today's set may have been picked at START before /me told us who this is —
+      // the preset level refills it (solved ones stay), so a 2200 player never starts on 1500s.
+      if (player && player.level && !state().level) setLevel(player.level);
       const session = register();
       if (!session) return;
       const q = new URLSearchParams(location.search);

@@ -73,3 +73,22 @@ def test_owner_sees_player_games_under_their_name(browser_page, app_url):
     groups = page.eval_on_selector_all("#sessionPick optgroup", "gs => gs.map(g => g.label)")
     assert "Games · Nico" in groups
     assert page.errors == []
+
+
+def test_preset_level_replaces_a_set_picked_before_the_player_was_known(browser_page, app_url):
+    """First visit: hosted.js learns the player only after /me, so today's set was picked at the default.
+    Once the player is known, the preset level (jfkjmh 2200) must refill today's set, not wait for tomorrow."""
+    page = browser_page
+    page.add_init_script("localStorage.setItem('zz_role', 'guest');"
+                         "window.PATH_VIEWER = { player: localStorage.getItem('zz_player') || '' };")
+    ratings = ("(() => { const t = window.pathStore.state.training; const d = Object.keys(t.days).sort().pop();"
+               " return t.days[d].map(id => window.PATH_PUZZLES.find(p => p.id === id).r); })()")
+    page.goto(app_url(tab="session"))
+    page.wait_for_function("document.getElementById('trainingLevel')")
+    assert max(page.evaluate(ratings)) < 1800, "before: picked at the default level"
+    page.evaluate("localStorage.setItem('zz_player', 'jfkjmh')")
+    page.goto(app_url(tab="session"))
+    page.wait_for_function("document.getElementById('trainingLevel')")
+    assert page.evaluate("window.pathStore.state.training.level") == 2200
+    assert min(page.evaluate(ratings)) > 2000, page.evaluate(ratings)
+    assert page.errors == []
