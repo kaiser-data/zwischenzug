@@ -328,6 +328,7 @@
   .btn.mic[aria-disabled="true"] { opacity: .45; }
   .btn.mic.on { outline: 2px solid currentColor; outline-offset: 1px; }
   .voice-heard { margin: 6px 0 0; min-height: 1.2em; }
+  .auto-reply { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 14px; cursor: pointer; }
   .voice-drill { margin: 10px 0 0; }
   .voice-drill summary { cursor: pointer; }
   .drill-say { font-size: 2rem; margin: 8px 0; min-height: 1.2em; }
@@ -495,6 +496,7 @@
               <button class="btn ghost nav" type="button" id="boardVoiceLang" title="Voice language">EN</button>
               <a class="btn ghost disabled" id="boardLichess" href="https://lichess.org/analysis" target="_blank" rel="noopener" aria-disabled="true">Lichess analysis</a>
             </div>
+            <label class="muted auto-reply" title="Off: you make both sides' moves — that is the training. On: the other side answers from the line."><input type="checkbox" id="boardAutoReply"> Play replies for me</label>
             <p class="muted voice-heard" id="voiceHeard" aria-live="polite"></p>
             <details class="voice-drill" id="voiceDrill">
               <summary>Train the voice model</summary>

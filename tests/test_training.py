@@ -179,3 +179,49 @@ def test_more_after_the_day_keeps_what_is_solved(browser_page, app_url):
     s2 = page.evaluate("window.PATH_SESSIONS[new URLSearchParams(location.search).get('session')]")
     ids = [st["id"] for st in s2["steps"]]
     assert len(ids) == 15 and len(set(ids)) == 15 and first["id"] in ids
+
+
+def tap(page, moves, fen):
+    """Play SAN moves on the board by tapping from- and to-squares."""
+    board = chess.Board(fen)
+    for san in moves:
+        m = board.parse_san(san)
+        page.click(f"#chessBoard [data-sq={chess.square_name(m.from_square)}]")
+        page.click(f"#chessBoard [data-sq={chess.square_name(m.to_square)}]")
+        board.push(m)
+
+
+def test_board_moves_fill_the_answer_box(browser_page, app_url):
+    """No 'Use board line' click: what is played on the board is already the written answer."""
+    page = browser_page
+    s = open_today(page, app_url)
+    first = s["steps"][0]
+    tap(page, first["solve"]["line"][:2], first["fen"])
+    box = page.input_value("input[name=line]")
+    assert first["solve"]["line"][0].rstrip("+#") in box and first["solve"]["line"][1].rstrip("+#") in box, box
+    assert not page.is_disabled("#boardLock"), "two moves are not the whole line: no Lock yet"
+    assert not page.errors
+
+
+def test_play_replies_for_me_is_off_by_default_and_answers_when_ticked(browser_page, app_url):
+    page = browser_page
+    s = open_today(page, app_url)
+    line, fen = s["steps"][0]["solve"]["line"], s["steps"][0]["fen"]
+    assert not page.is_checked("#boardAutoReply")
+    tap(page, line[:1], fen)
+    page.wait_for_timeout(800)
+    assert line[1].rstrip("+#") not in page.input_value("input[name=line]"), "off: the other side waits for him"
+    page.check("#boardAutoReply")                 # ticked on the other side's turn: it answers now
+    page.wait_for_function("m => document.querySelector('input[name=line]').value.includes(m)",
+                           arg=line[1].rstrip("+#"))
+    tap(page, line[2:3], _after(fen, line[:2]))
+    page.wait_for_function("m => document.querySelector('input[name=line]').value.includes(m)",
+                           arg=line[3].rstrip("+#"))
+    assert not page.errors
+
+
+def _after(fen, moves):
+    b = chess.Board(fen)
+    for m in moves:
+        b.push_san(m)
+    return b.fen()

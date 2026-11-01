@@ -88,6 +88,7 @@
         const el = document.createElement("button");
         el.type = "button";
         el.className = "sq " + ((fi + ri) % 2 ? "dark" : "light");
+        el.dataset.sq = sq;
         if (selected === sq) el.classList.add("sel");
         if (hintSq === sq) el.classList.add("hint-from");
         if (dests.has(sq)) el.classList.add("hint", piece ? "piece" : "empty");
@@ -156,7 +157,7 @@
       if (move) keepFuture(move);
       if (!move && piece && piece.color === game.turn()) selected = sq;
       renderBoard();
-      if (move) autoCheck();
+      if (move) afterBoardMove();
       return;
     }
     if (piece && piece.color === game.turn()) {
@@ -1642,6 +1643,72 @@
   }
   window.pathVoiceUtterance = function (blob, startedAt) { utterance(blob || new Blob(["x"], { type: "audio/wav" }), startedAt); return listen.queue; };
 
+  // The lines a written step accepts, from the step position (main line first).
+  function answerLines(s) {
+    if (s.type === "stopPly") {
+      const sp = s.stopPly || {};
+      return [[sp.candidate, sp.scare].concat(sp.continue || [])];
+    }
+    if (s.type === "solve") return [(s.solve || {}).line || []].concat((s.solve || {}).alts || []);
+    const b = writeBranch();
+    return b ? [b.mustPlay || []].concat(b.alts || []) : [];
+  }
+
+  // A move made on the board (tap or drag): the answer box follows the board, the line may be
+  // finished, and with "Play replies for me" ticked the other side answers from the line.
+  function afterBoardMove() {
+    mirrorAnswer();
+    autoCheck();
+    if (autoReplyOn()) {
+      clearTimeout(replyTimer);
+      const at = game.history().length, g = game;
+      replyTimer = setTimeout(function () { if (game === g && game.history().length === at) playReply(); }, 450);
+    }
+  }
+
+  // The board line goes into the answer box as it is played — no "Use board line" click needed.
+  function mirrorAnswer() {
+    if (!game || locked[step] || !takesLine()) return;
+    const played = game.history();
+    if (played.length > lineBase().length) fillAnswer(played, true);
+  }
+
+  // Off by default: making the replies yourself is the training (several similar replies take
+  // longer to find, and that is the point). Ticked, the other side plays the written line's reply.
+  const AUTO_REPLY_KEY = "zwischenzug_auto_reply";
+  let replyTimer = null;
+  function autoReplyOn() { try { return localStorage.getItem(AUTO_REPLY_KEY) === "1"; } catch (e) { return false; } }
+
+  function replyMove() {
+    if (!game || locked[step]) return null;
+    const s = cur(), played = game.history();
+    const wb = writeBranch();
+    let lines;
+    if (takesLine()) lines = answerLines(s);
+    else if ((s.branches || []).length && (branchLocked[activeBranch] || atAnswer)) return null;
+    else lines = [mustPlayNow()];
+    // His plies start at the step position (or after the moves a written card shows); the others are replies.
+    const his = wb ? givenOf(wb) % 2 : 0;
+    if (played.length % 2 === his) return null;
+    if (s.type === "stopPly" && !stopPassed && played.length === 1) return null;   // naming that reply is the task
+    const h = played.map(norm);
+    const hit = lines.find(function (l) { return l.length > played.length && startsWith(l.map(norm), h); });
+    return hit ? hit[played.length] : null;
+  }
+
+  function playReply() {
+    const san = replyMove();
+    if (!san) return;
+    const move = game.move(san, { sloppy: true });
+    if (!move) return;
+    future = [];
+    futureGame = game;
+    selected = null;
+    renderBoard();
+    mirrorAnswer();
+    autoCheck();
+  }
+
   // The board notices a finished line by itself. Lock stays for "I stop here" and for the questions.
   function autoCheck() {
     if (locked[step] || !game) return;
@@ -1649,16 +1716,7 @@
     if ((s.branches || []).length && (branchLocked[activeBranch] || atAnswer)) return;
     const played = game.history();
     if (takesLine()) {
-      let lines;
-      if (s.type === "stopPly") {
-        const sp = s.stopPly || {};
-        lines = [[sp.candidate, sp.scare].concat(sp.continue || [])];
-      } else if (s.type === "solve") {
-        lines = [(s.solve || {}).line || []].concat((s.solve || {}).alts || []);
-      } else {
-        const b = writeBranch();
-        lines = [b.mustPlay || []].concat(b.alts || []);
-      }
+      const lines = answerLines(s);
       const exact = lines.some(function (l) { return sameLine(l, played); });
       const longest = Math.max.apply(null, lines.map(function (l) { return l.length; }));
       if ((exact || played.length >= longest) && fillAnswer(played)) lockStep();
@@ -2021,9 +2079,10 @@
   }
 
   // Write a line into the answer boxes so it need not be typed. Lock still grades it.
-  function fillAnswer(moves) {
+  // quiet: written while he plays — no messages, no focus (the phone keyboard stays down).
+  function fillAnswer(moves, quiet) {
     const form = document.getElementById("boardForm");
-    const err = document.getElementById("boardErr");
+    const err = quiet ? {} : document.getElementById("boardErr");
     const s = cur();
     if (!takesLine() || !form) return false;
     if (!moves.length) {
@@ -2057,6 +2116,7 @@
       box = form.elements["continue"];
       box.value = numbered(s.fen, moves.slice(2), 2);
     }
+    if (quiet) return true;
     err.textContent = moves.length + (moves.length === 1 ? " move" : " moves") + " written from the board. Is the last one really the end? Then Lock.";
     box.focus({ preventScroll: true });
     box.setSelectionRange(box.value.length, box.value.length);
@@ -2299,6 +2359,14 @@
     document.getElementById("boardLock").addEventListener("click", lockStep);
     document.getElementById("boardRedo").addEventListener("click", redoStep);
     document.getElementById("boardFlip").addEventListener("click", flipBoard);
+    const autoReply = document.getElementById("boardAutoReply");
+    if (autoReply) {
+      autoReply.checked = autoReplyOn();
+      autoReply.addEventListener("change", function () {
+        try { localStorage.setItem(AUTO_REPLY_KEY, autoReply.checked ? "1" : "0"); } catch (e) { /* ignore */ }
+        if (autoReply.checked) playReply();     // ticked while it is the other side's turn: answer now
+      });
+    }
     const mic = document.getElementById("boardMic");
     if (mic) {
       mic.addEventListener("pointerdown", function (e) { e.preventDefault(); voiceStart(); });
